@@ -3,9 +3,12 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, ILike } from 'typeorm';
+import { createHash, randomInt, randomUUID } from 'crypto';
+import { EmailVerificationService } from './services/email-verification.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
@@ -30,66 +33,34 @@ export class AuthService {
     private verificationTokenRepository: Repository<VerificationToken>,
     private jwtService: JwtService,
     private configService: ConfigService,
-    private emailService: EmailService,   
+    private emailService: EmailService,
+    private emailVerification: EmailVerificationService,
   ) {}
 
-  async register(registerDto: RegisterDto) {
-    // Check if user exists
-    const existingUser = await this.userRepository.findOne({
-      where: [{ username: registerDto.username }, { email: registerDto.email }],
-    });
-
-    if (existingUser) {
+  async register(dto: RegisterDto) {
+    const email = dto.email.trim().toLowerCase();
+    const username = dto.username.trim();
+    if (username.length < 3 || username.length > 50) throw new BadRequestException('Username must be 3–50 characters');
+    if (Buffer.byteLength(dto.password, 'utf8') > 72) throw new BadRequestException('Password must be at most 72 UTF-8 bytes');
+    if (await this.userRepository.findOne({ where: [{ username }, { email: ILike(email) }] })) {
       throw new ConflictException('Username or email already exists');
     }
-
-    const hashedPassword = await bcrypt.hash(
-      registerDto.password,
-      this.configService.get('bcrypt.rounds') || 12,      
-    );
-
-    const user = this.userRepository.create({
-      username: registerDto.username,
-      email: registerDto.email,
-      full_name: registerDto.full_name,
-      status: 'active',
-      role: UserRole.USER, // Default role
+    const hash = await bcrypt.hash(dto.password, this.configService.get('bcrypt.rounds') || 12);
+    const user = await this.userRepository.manager.transaction(async manager => {
+      const users = manager.getRepository(User);
+      const saved = await users.save(users.create({
+        username, email, full_name: dto.full_name, status: 'active', role: UserRole.USER, email_verified_at: null,
+      }));
+      await manager.getRepository(UserAuth).save({ user_id: saved.id, password_hash: hash, token_version: 0 });
+      return saved;
+    }).catch(error => {
+      if (error.code === '23505') throw new ConflictException('Username or email already exists');
+      throw error;
     });
-    await this.userRepository.save(user);
-
-    // Create user auth
-    const userAuth = this.userAuthRepository.create({
-      user_id: user.id,
-      password_hash: hashedPassword,
-      token_version: 0,
-    });
-    await this.userAuthRepository.save(userAuth);
-
-    // Fetch user with level relation for consistent response
-    const userWithLevel = await this.userRepository.findOne({
-      where: { id: user.id },
-      relations: ['level'],
-    });
-
-    if (!userWithLevel) {
-      throw new BadRequestException('Failed to fetch user after registration');
-    }
-
-    return {
-      user: {
-        id: userWithLevel.id,
-        username: userWithLevel.username,
-        email: userWithLevel.email,
-        full_name: userWithLevel.full_name,
-        avatar_url: userWithLevel.avatar_url,
-        language: userWithLevel.language,
-        status: userWithLevel.status,
-        role: userWithLevel.role,
-        level_code: userWithLevel.level_code,
-        level: userWithLevel.level,
-        created_at: userWithLevel.created_at,
-      },
-    };
+    const sent = await this.emailVerification.issue(user);
+    return { user, verification_required: true, message: sent ?
+      'Account created. Check your email for a verification code.' :
+      'Account created. Request a verification code to finish signing up.' };
   }
 
   async login(loginDto: LoginDto, userAgent: string, ip: string) {
@@ -133,22 +104,26 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.email_verified_at) throw new ForbiddenException({ code: 'EMAIL_NOT_VERIFIED', message: 'Verify your email before signing in.' });
+    if (user.status !== 'active') throw new UnauthorizedException('User account is inactive or suspended');
+    const sessionId = randomUUID();
+
     // Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(
       user.id,
       userAuth.token_version,
       user.role,
+      sessionId,
     );
 
     // Create session
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
-    const sessionId = `${user.id}_${Date.now()}_${Math.random().toString(36)}`;
     const session = this.sessionRepository.create({
       id: sessionId,
       user_id: user.id,
-      refresh_token_hash: await bcrypt.hash(refreshToken, 10),
+      refresh_token_hash: await bcrypt.hash(this.refreshDigest(refreshToken), 10),
       user_agent: userAgent,
       ip,
       expires_at: expiresAt,
@@ -176,66 +151,24 @@ export class AuthService {
 
   async refreshToken(refreshToken: string) {
     try {
-      const payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get('jwt.refreshSecret'),
-      });
-
-      // Find session
-      const sessions = await this.sessionRepository.find({
-        where: { user_id: payload.sub },
-      });
-
-      let validSession: Session | null = null;
-      for (const session of sessions) {
-        const isValid = await bcrypt.compare(
-          refreshToken,
-          session.refresh_token_hash,
-        );
-        if (isValid) {
-          validSession = session;
-          break;
+      const payload = this.jwtService.verify(refreshToken, { secret: this.configService.get('jwt.refreshSecret') });
+      if (payload.token_use !== 'refresh' || !payload.sid) throw new UnauthorizedException('Invalid refresh token');
+      return await this.sessionRepository.manager.transaction(async manager => {
+        const sessions = manager.getRepository(Session);
+        const session = await sessions.findOne({ where: { id: payload.sid, user_id: payload.sub }, lock: { mode: 'pessimistic_write' } });
+        if (!session || !session.expires_at || session.expires_at < new Date() ||
+            !await bcrypt.compare(this.refreshDigest(refreshToken), session.refresh_token_hash)) throw new UnauthorizedException('Invalid refresh token');
+        const auth = await manager.getRepository(UserAuth).findOne({ where: { user_id: payload.sub } });
+        const user = await manager.getRepository(User).findOne({ where: { id: payload.sub } });
+        if (!auth || auth.token_version !== payload.tokenVersion || !user || user.status !== 'active' || !user.email_verified_at) {
+          throw new UnauthorizedException('Session expired');
         }
-      }
-
-      if (!validSession || validSession.expires_at < new Date()) {   
-        throw new UnauthorizedException('Invalid refresh token');
-      }
-
-      // Get user auth to check token version
-      const userAuth = await this.userAuthRepository.findOne({
-        where: { user_id: payload.sub },
-        select: ['user_id', 'password_hash', 'token_version'],
-      }); 
-
-      if (!userAuth || userAuth.token_version !== payload.tokenVersion) {
-        throw new UnauthorizedException('Token version mismatch');
-      }
-
-      // Get user to get role
-      const user = await this.userRepository.findOne({
-        where: { id: payload.sub },
+        const tokens = await this.generateTokens(user.id, auth.token_version, user.role, session.id);
+        session.refresh_token_hash = await bcrypt.hash(this.refreshDigest(tokens.refreshToken), 10);
+        await sessions.save(session);
+        return tokens;
       });
-
-      if (!user) {
-        throw new UnauthorizedException('User not found');
-      }
-
-      // Generate new tokens with role
-      const tokens = await this.generateTokens(
-        payload.sub,
-        userAuth.token_version,
-        user.role,
-      );
-
-      // Update session
-      validSession.refresh_token_hash = await bcrypt.hash(
-        tokens.refreshToken,
-        10,
-      );
-      await this.sessionRepository.save(validSession);
-
-      return tokens;
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -247,7 +180,7 @@ export class AuthService {
 
     for (const session of sessions) {
       const isValid = await bcrypt.compare(
-        refreshToken,
+        this.refreshDigest(refreshToken),
         session.refresh_token_hash,
       );
       if (isValid) {
@@ -259,7 +192,9 @@ export class AuthService {
     throw new BadRequestException('Session not found');
   }
 
-  async validateUser(userId: string, tokenVersion?: number) {
+  async validateUser(userId: string, tokenVersion?: number, sessionId?: string) {
+    const session = sessionId ? await this.sessionRepository.findOne({ where: { id: sessionId, user_id: userId } }) : null;
+    if (!session || !session.expires_at || session.expires_at <= new Date()) throw new UnauthorizedException('Session has expired or been revoked');
     const user = await this.userRepository.findOne({
       where: { id: userId },
     });
@@ -268,7 +203,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    if (user.status !== 'active') {
+    if (!user.email_verified_at || user.status !== 'active') {
       throw new UnauthorizedException('User account is inactive or suspended');
     }
 
@@ -320,27 +255,19 @@ export class AuthService {
     };
   }
 
-  private async generateTokens(
-    userId: string,
-    tokenVersion: number,
-    role: UserRole = UserRole.USER,
-  ) {
+  private refreshDigest(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async generateTokens(userId: string, tokenVersion: number, role: UserRole, sessionId: string) {
     const accessToken = this.jwtService.sign(
-      { sub: userId, tokenVersion, role },
-      {
-        secret: this.configService.get('jwt.secret'),
-        expiresIn: this.configService.get('jwt.expiresIn'),
-      },
+      { sub: userId, tokenVersion, role, token_use: 'access', sid: sessionId, jti: randomUUID() },
+      { secret: this.configService.get('jwt.secret'), expiresIn: this.configService.get('jwt.expiresIn') },
     );
-
     const refreshToken = this.jwtService.sign(
-      { sub: userId, tokenVersion, role },
-      {
-        secret: this.configService.get('jwt.refreshSecret'),
-        expiresIn: this.configService.get('jwt.refreshExpiresIn'),
-      },
+      { sub: userId, tokenVersion, role, token_use: 'refresh', sid: sessionId, jti: randomUUID() },
+      { secret: this.configService.get('jwt.refreshSecret'), expiresIn: this.configService.get('jwt.refreshExpiresIn') },
     );
-
     return { accessToken, refreshToken };
   }
 
@@ -349,7 +276,7 @@ export class AuthService {
 
     // Find user by email
     const user = await this.userRepository.findOne({
-      where: { email },
+      where: { email: ILike(email.trim()) },
     });
 
     if (!user) {
@@ -381,7 +308,7 @@ export class AuthService {
     }
 
     // Generate 6-digit code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const code = randomInt(100000, 1000000).toString();
     const codeHash = await bcrypt.hash(code, 10);
 
     // Set expiration time (15 minutes)
@@ -404,121 +331,56 @@ export class AuthService {
     await this.verificationTokenRepository.save(verificationToken);
 
     // Send email with reset code
-    await this.emailService.sendPasswordResetCode(email, code, user.username);
+    await this.emailService.sendPasswordResetCode(user.email, code, user.username);
 
     return {
       message: 'If the email exists, a password reset code has been sent',
     };
   }
 
-  async verifyResetCode(verifyResetCodeDto: VerifyResetCodeDto) {
-    const { email, code } = verifyResetCodeDto;
-
-    const user = await this.userRepository.findOne({
-      where: { email },
+  async verifyResetCode(dto: VerifyResetCodeDto) {
+    const user = await this.userRepository.findOne({ where: { email: ILike(dto.email.trim()) } });
+    if (!user || !/^\d{6}$/.test(dto.code)) throw new BadRequestException('Invalid or expired reset code');
+    const tokenId = await this.verificationTokenRepository.manager.transaction(async manager => {
+      const repo = manager.getRepository(VerificationToken);
+      const token = await repo.findOne({ where: { user_id: user.id, type: 'password_reset', used_at: IsNull() }, lock: { mode: 'pessimistic_write' } });
+      if (!token || token.expires_at <= new Date() || token.attempt_count >= 5) return null;
+      token.attempt_count += 1;
+      const matches = await bcrypt.compare(dto.code, token.token_hash);
+      if (!matches && token.attempt_count >= 5) token.used_at = new Date();
+      await repo.save(token);
+      return matches ? token.id : null;
     });
-
-    if (!user) {
-      throw new BadRequestException('Invalid or expired reset code');
-    }
-
-    // Find the latest active verification token for this user
-    const verificationToken = await this.verificationTokenRepository.findOne({
-      where: {
-        user_id: user.id,
-        type: 'password_reset',
-        used_at: IsNull(),
-      },
-      order: { created_at: 'DESC' },
-    });
-
-    if (!verificationToken || verificationToken.expires_at <= new Date()) {
-      throw new BadRequestException('Invalid or expired reset code');
-    }
-
-    const isValid = await bcrypt.compare(code, verificationToken.token_hash);
-    if (!isValid) {
-      throw new BadRequestException('Invalid or expired reset code');
-    }
-
-    // Generate temporary token for password reset (expires in 10 minutes)
-    const tempToken = this.jwtService.sign(
-      { 
-        sub: verificationToken.user_id, 
-        type: 'password_reset',
-        tokenId: verificationToken.id 
-      },
-      {
-        secret: this.configService.get('jwt.secret'),
-        expiresIn: '10m', // 10 minutes
-      },
-    );
-
-    return {
-      valid: true,
-      token: tempToken,
-      message: 'Code verified successfully. You can now reset your password.',
-    };
+    if (!tokenId) throw new BadRequestException('Invalid or expired reset code');
+    const token = this.jwtService.sign({ sub: user.id, type: 'password_reset', tokenId },
+      { secret: this.configService.get('jwt.secret'), expiresIn: '10m' });
+    return { valid: true, token, message: 'Code verified. Choose a new password.' };
   }
 
-  async resetPassword(resetPasswordDto: ResetPasswordDto) {
-    const { token, password } = resetPasswordDto;
-
-    try {
-      // Verify the temporary token
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get('jwt.secret'),
-      });
-
-      if (payload.type !== 'password_reset') {
-        throw new BadRequestException('Invalid reset token');
-      }
-
-      // Find the verification token
-      const verificationToken = await this.verificationTokenRepository.findOne({
-        where: { id: payload.tokenId },
-      });
-
-      if (!verificationToken || verificationToken.used_at) {
-        throw new BadRequestException('Invalid or already used reset token');
-      }
-
-      // Hash new password
-      const hashedPassword = await bcrypt.hash(
-        password,
-        this.configService.get('bcrypt.rounds') || 12,
-      );
-
-      // Update user password
-      const userAuth = await this.userAuthRepository.findOne({
-        where: { user_id: verificationToken.user_id },
-        select: ['user_id', 'password_hash', 'token_version'],
-      });
-
-      if (!userAuth) {
-        throw new BadRequestException('User authentication not found');
-      }
-
-      userAuth.password_hash = hashedPassword;
-      userAuth.token_version += 1; // Invalidate all existing sessions
-      await this.userAuthRepository.save(userAuth);
-
-      // Mark verification token as used
-      verificationToken.used_at = new Date();
-      await this.verificationTokenRepository.save(verificationToken);
-
-      // Invalidate all existing sessions for this user
-      await this.sessionRepository.delete({ user_id: verificationToken.user_id });
-
-      return {
-        message: 'Password reset successfully. Please login with your new password.',
-      };
-    } catch (error) {
-      if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+  async resetPassword(dto: ResetPasswordDto) {
+    let payload: any;
+    try { payload = this.jwtService.verify(dto.token, { secret: this.configService.get('jwt.secret') }); }
+    catch { throw new BadRequestException('Invalid or expired reset token'); }
+    if (payload.type !== 'password_reset') throw new BadRequestException('Invalid reset token');
+    if (Buffer.byteLength(dto.password, 'utf8') > 72) throw new BadRequestException('Password must be at most 72 UTF-8 bytes');
+    const hash = await bcrypt.hash(dto.password, this.configService.get('bcrypt.rounds') || 12);
+    await this.verificationTokenRepository.manager.transaction(async manager => {
+      const tokens = manager.getRepository(VerificationToken);
+      const token = await tokens.findOne({ where: { id: payload.tokenId }, lock: { mode: 'pessimistic_write' } });
+      if (!token || token.type !== 'password_reset' || token.user_id !== payload.sub || token.used_at || token.expires_at <= new Date()) {
         throw new BadRequestException('Invalid or expired reset token');
       }
-      throw error;
-    }
+      const auths = manager.getRepository(UserAuth);
+      const auth = await auths.findOne({ where: { user_id: token.user_id }, lock: { mode: 'pessimistic_write' } });
+      if (!auth) throw new BadRequestException('User authentication not found');
+      auth.password_hash = hash;
+      auth.token_version += 1;
+      await auths.save(auth);
+      token.used_at = new Date();
+      await tokens.save(token);
+      await manager.getRepository(Session).delete({ user_id: token.user_id });
+    });
+    return { message: 'Password reset successfully. Sign in with your new password.' };
   }
 
   async resendCode(resendCodeDto: ResendCodeDto) {
@@ -526,7 +388,7 @@ export class AuthService {
 
     // Find user by email
     const user = await this.userRepository.findOne({
-      where: { email },
+      where: { email: ILike(email.trim()) },
     });
 
     if (!user) {
@@ -558,7 +420,7 @@ export class AuthService {
     }
 
     // Generate new 6-digit code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const code = randomInt(100000, 1000000).toString();
     const codeHash = await bcrypt.hash(code, 10);
 
     // Set expiration time (15 minutes)
@@ -581,7 +443,7 @@ export class AuthService {
     await this.verificationTokenRepository.save(verificationToken);
 
     // Send email with new reset code
-    await this.emailService.sendPasswordResetCode(email, code, user.username);
+    await this.emailService.sendPasswordResetCode(user.email, code, user.username);
 
     return {
       message: 'If the email exists, a new password reset code has been sent',

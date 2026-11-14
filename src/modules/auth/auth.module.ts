@@ -12,6 +12,8 @@ import { JwtStrategy } from '@auth/strategies/jwt.strategy';
 import { AuthService } from '@auth/auth.service';
 import { AuthController } from '@auth/auth.controller';
 import { EmailService } from '@auth/services/email.service';
+import { EmailVerificationService } from './services/email-verification.service';
+import { AuthThrottleGuard } from './guards/auth-throttle.guard';
 
 @Module({
   imports: [
@@ -29,7 +31,7 @@ import { EmailService } from '@auth/services/email.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, EmailService],
+  providers: [AuthService, JwtStrategy, EmailService, EmailVerificationService, AuthThrottleGuard],
   exports: [AuthService],
 })
 export class AuthModule {}

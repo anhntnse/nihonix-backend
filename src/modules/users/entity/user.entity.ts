@@ -48,6 +48,12 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   level_code!: string | null;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  email_verified_at: Date | null;
+
+  @Column({ type: 'jsonb', default: () => "'{}'::jsonb" })
+  learning_settings: Record<string, unknown>;
+
   @CreateDateColumn()
   created_at: Date;
 

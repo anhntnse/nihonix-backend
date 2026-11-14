@@ -14,6 +14,11 @@ describe('RegisterDto', () => {
     expect(errors).toEqual([]);
   });
 
+  it('rejects passwords shorter than eight characters', async () => {
+    const errors = await validate(plainToInstance(RegisterDto, { ...account, password: '1234567' }));
+    expect(errors.some(error => error.property === 'password')).toBe(true);
+  });
+
   it('rejects a non-string full name', async () => {
     const errors = await validate(plainToInstance(RegisterDto, { ...account, full_name: 123 }));
     expect(errors.some((error) => error.property === 'full_name')).toBe(true);

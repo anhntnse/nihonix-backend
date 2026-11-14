@@ -28,6 +28,9 @@ export class VerificationToken {
   @Column({ type: 'timestamp', nullable: true })
   used_at: Date;
 
+  @Column({ type: 'integer', default: 0 })
+  attempt_count: number;
+
   @CreateDateColumn()
   created_at: Date;
 

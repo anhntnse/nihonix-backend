@@ -8,6 +8,8 @@ export interface JwtPayload {
   sub: string;
   tokenVersion: number;
   role?: string;
+  token_use?: string;
+  sid?: string;
 }
 
 @Injectable()
@@ -29,7 +31,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const user = await this.authService.validateUser(payload.sub, payload.tokenVersion);
+    if (payload.token_use !== 'access' || !payload.sid) throw new UnauthorizedException('Invalid access token');
+    const user = await this.authService.validateUser(payload.sub, payload.tokenVersion, payload.sid);
 
     if (!user) {
       throw new UnauthorizedException('User not found');

@@ -14,11 +14,25 @@ import { ApiTags, ApiOperation, ApiCreatedResponse, ApiOkResponse, ApiBearerAuth
 import { AuthService } from '@auth/auth.service';
 import { RegisterDto, LoginDto, RefreshTokenDto, LogoutDto, ForgotPasswordDto, VerifyResetCodeDto, ResetPasswordDto, ResendCodeDto } from '@auth/dto';
 import { JwtAuthGuard } from '@auth/guards/jwt-auth.guard';
+import { AuthThrottleGuard } from './guards/auth-throttle.guard';
+import { EmailVerificationService } from './services/email-verification.service';
+import { VerifyEmailDto, RequestEmailVerificationDto } from './dto/email-verification.dto';
 
 @ApiTags('Authentication')
+@UseGuards(AuthThrottleGuard)
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService, private readonly verification: EmailVerificationService) {}
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  verifyEmail(@Body() dto: VerifyEmailDto) { return this.verification.verify(dto.email, dto.code); }
+
+  @Post('request-email-verification')
+  @HttpCode(HttpStatus.OK)
+  requestVerification(@Body() dto: RequestEmailVerificationDto, @Request() req) {
+    return this.verification.request(dto.email, req.res?.getHeader('X-Request-Id'));
+  }
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
@@ -65,7 +79,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiOkResponse({ description: 'User profile retrieved' })
   async getProfile(@Request() req) {
-    return req.user;
+    return this.authService.getCurrentUser(req.user.id);
   }
 
   @Post('forgot-password')

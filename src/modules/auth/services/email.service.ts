@@ -1,16 +1,26 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter | null = null;
+  private readonly logger = new Logger(EmailService.name);
 
   constructor(private configService: ConfigService) {}
 
   private getTransporter(): nodemailer.Transporter {
     if (!this.transporter) {
-      this.transporter = nodemailer.createTransport({       
+      this.logger.log(JSON.stringify({
+        event: 'smtp.transport_initializing',
+        host: this.configService.get('email.host'),
+        port: this.configService.get('email.port'),
+        secure: this.configService.get('email.secure'),
+        hasUser: !!this.configService.get('email.user'),
+        hasPassword: !!this.configService.get('email.password'),
+        hasFrom: !!this.configService.get('email.fromEmail'),
+      }));
+      this.transporter = nodemailer.createTransport({
         host: this.configService.get('email.host'),
         port: this.configService.get('email.port'),
         secure: this.configService.get('email.secure'),
@@ -88,6 +98,32 @@ export class EmailService {
     } catch (error) {
 
       throw new Error('Failed to send email. Please try again later.');
+    }
+  }
+
+  async sendEmailVerificationCode(email: string, code: string, requestId?: string) {
+    this.logger.log(JSON.stringify({ event: 'smtp.verification_send_started', requestId }));
+    try {
+      const result = await this.getTransporter().sendMail({
+        from: this.configService.get('email.fromEmail'), to: email,
+        subject: 'Verify your email - Nihonix',
+        text: 'Your Nihonix verification code is ' + code + '. It expires in 15 minutes. If you did not request this, ignore this email.',
+      });
+      if (!result.accepted?.length) {
+        throw Object.assign(new Error('SMTP did not accept the verification recipient'), { code: 'ERECIPIENT' });
+      }
+      this.logger.log(JSON.stringify({
+        event: 'smtp.verification_accepted', requestId, messageId: result.messageId,
+        acceptedCount: result.accepted.length, rejectedCount: result.rejected?.length || 0,
+      }));
+      return result;
+    } catch (error) {
+      const detail = error as { name?: string; code?: string; responseCode?: number };
+      this.logger.error(JSON.stringify({
+        event: 'smtp.verification_failed', requestId,
+        errorType: detail?.name, errorCode: detail?.code, smtpResponseCode: detail?.responseCode,
+      }));
+      throw error;
     }
   }
 
