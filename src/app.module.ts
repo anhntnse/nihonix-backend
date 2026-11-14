@@ -1,3 +1,4 @@
+import { AppConfigController } from './app-config.controller';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -45,7 +46,7 @@ import { PracticeModule } from './modules/practice/practice.module';
     VocabularySetsModule,
     PracticeModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, AppConfigController],
   providers: [AppService],
 })
 export class AppModule {}
