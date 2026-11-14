@@ -15,6 +15,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:sprint02": "ts-node -r tsconfig-paths/register test/sprint02.integration.ts",
     "test:api": "ts-node -r tsconfig-paths/register scripts/test-api.ts",
     "test:auth": "ts-node -r tsconfig-paths/register scripts/test-auth-flow.ts",
     "start:dev": "cross-env NODE_ENV=development nest start --watch --preserveWatchOutput",

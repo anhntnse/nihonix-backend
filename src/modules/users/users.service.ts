@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { User } from '@users/entity/user.entity';
 import { UpdateUserDto } from '@users/dto/update-user.dto';
 import { Level } from '@levels/entity/level.entity';
+import { DEFAULT_LEARNING_SETTINGS, UpdateLearningSettingsDto } from './dto/learning-settings.dto';
 
 @Injectable()
 export class UsersService {
@@ -30,6 +31,8 @@ export class UsersService {
         'status',
         'role',
         'level_code',
+        'email_verified_at',
+        'learning_settings',
         'created_at',
       ],
       relations: ['level'],
@@ -49,6 +52,8 @@ export class UsersService {
         'status',
         'role',
         'level_code',
+        'email_verified_at',
+        'learning_settings',
         'created_at',
       ],
       relations: ['level'],
@@ -64,8 +69,20 @@ export class UsersService {
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.findById(id);
 
-    Object.assign(user, updateUserDto);
-    return this.userRepository.save(user);
+    const changes = Object.fromEntries(Object.entries(updateUserDto).filter(([, value]) => value !== undefined && value !== null));
+    if (typeof changes.username === 'string') {
+      changes.username = changes.username.trim();
+      if (changes.username.length < 3 || changes.username.length > 50) throw new BadRequestException('Username must be 3–50 characters');
+    }
+    if (typeof changes.full_name === 'string') changes.full_name = changes.full_name.trim();
+    if (changes.email && changes.email !== user.email) user.email_verified_at = null;
+    Object.assign(user, changes);
+    try { await this.userRepository.save(user); }
+    catch (error) {
+      if (error.code === '23505') throw new BadRequestException('Username or email already exists');
+      throw error;
+    }
+    return this.findById(id);
   }
 
   async remove(id: string): Promise<void> {
@@ -134,6 +151,24 @@ export class UsersService {
 
     // Return updated user with level relation
     return this.findById(userId);
+  }
+
+  async getSettings(userId: string) {
+    const user = await this.findById(userId);
+    return { ...DEFAULT_LEARNING_SETTINGS, ...user.learning_settings };
+  }
+
+  async updateSettings(userId: string, dto: UpdateLearningSettingsDto) {
+    if (Object.values(dto).some(value => value === null)) throw new BadRequestException('Settings cannot be null');
+    return this.userRepository.manager.transaction(async manager => {
+      const repo = manager.getRepository(User);
+      const user = await repo.findOne({ where: { id: userId }, lock: { mode: 'pessimistic_write' } });
+      if (!user) throw new NotFoundException('User not found');
+      const changes = Object.fromEntries(Object.entries(dto).filter(([, value]) => value !== undefined));
+      user.learning_settings = { ...DEFAULT_LEARNING_SETTINGS, ...user.learning_settings, ...changes };
+      await repo.save(user);
+      return user.learning_settings;
+    });
   }
 
   async updateAvatarUrl(userId: string, avatarUrl: string): Promise<User> {

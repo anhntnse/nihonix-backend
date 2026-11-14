@@ -64,6 +64,11 @@ export class CloudinaryService {
     file: Express.Multer.File,
     userId: string,
   ): Promise<UploadApiResponse> {
+    const buffer = file.buffer;
+    const jpeg = buffer?.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    const png = buffer?.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const webp = buffer?.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+    if (!jpeg && !png && !webp) throw new BadRequestException('Choose a JPEG, PNG or WebP image');
     const baseFolder = this.configService.get('cloudinary.uploadFolder') || 'nihonix';
     const avatarFolder = `${baseFolder}/avatars`;
     
@@ -72,6 +77,11 @@ export class CloudinaryService {
       avatarFolder,
       `avatar_${userId}`, 
     );
+  }
+
+  async deleteAvatar(userId: string) {
+    const baseFolder = this.configService.get('cloudinary.uploadFolder') || 'nihonix';
+    await this.deleteImage(baseFolder + '/avatars/avatar_' + userId);
   }
 
   async deleteImage(publicId: string): Promise<any> {
