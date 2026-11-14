@@ -1,3 +1,7 @@
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { Controller, Get, Param, Query, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { VocabularyItemsService } from './services/vocabulary-items.service';
@@ -33,6 +37,8 @@ export class VocabularyItemsController {
   }
 
   @Post('generate')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @ApiOperation({ summary: 'Generate vocabulary items using AI' })
   @ApiOkResponse({ description: 'Vocabulary generation started/completed' })
   @ApiBody({ type: GenerateVocabularyDto })

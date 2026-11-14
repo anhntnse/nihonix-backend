@@ -27,7 +27,7 @@ export class TopicsService {
 
     const topics = await this.topicRepository.find({
       where,
-      order: { order: 'ASC' },
+      order: { order: 'ASC', id: 'ASC' },
       relations: ['level'],
     });
 
@@ -49,7 +49,7 @@ export class TopicsService {
     // Attach ETag to each topic
     return topics.map(topic => {
       const etag = etagMap.get(topic.id) || 
-        this.etagService.generateETag(topic);
+        this.etagService.generateETag(topic, new Date(0));
       return { ...topic, etag } as Topic & { etag: string };
     });
   }
@@ -139,7 +139,7 @@ export class TopicsService {
       },
     });
 
-    const etag = syncRecord?.row_etag || this.etagService.generateETag(savedTopic);
+    const etag = syncRecord?.row_etag || this.etagService.generateETag(savedTopic, new Date(0));
 
     return { ...savedTopic, etag } as Topic & { etag: string };
   }

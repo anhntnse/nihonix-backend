@@ -1,3 +1,4 @@
+import { LevelsModule } from '../levels/levels.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Topic } from './entity/topic.entity';
@@ -12,6 +13,7 @@ import { EntitySync } from '@entity-sync/entity/entity-sync.entity';
   imports: [
     TypeOrmModule.forFeature([Topic, Level, EntitySync]), 
     SeedModule,
+    LevelsModule,
     EntitySyncModule, // Import để dùng EntitySyncService và EtagService
   ],
   controllers: [TopicsController],

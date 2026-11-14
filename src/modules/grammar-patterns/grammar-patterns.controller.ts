@@ -1,3 +1,7 @@
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { Controller, Get, Param, Query, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { GrammarPatternsService } from './services/grammar-patterns.service';
@@ -34,6 +38,8 @@ export class GrammarPatternsController {
   }
 
   @Post('generate')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @ApiOperation({ summary: 'Generate grammar patterns using AI' })
   @ApiOkResponse({ description: 'Grammar generation started/completed' })
   @ApiBody({ type: GenerateGrammarDto })
