@@ -5,6 +5,8 @@ import {
   CallHandler,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Response } from 'express';
+import { requestId } from '../request-id';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ApiResponse } from '@interfaces/api-response.interface';
@@ -30,7 +32,8 @@ export class ResponseInterceptor<T>
   ): Observable<ApiResponse<T>> {
     const response = context
       .switchToHttp()
-      .getResponse<ResponseWithStatusCode>();
+      .getResponse<Response>();
+    requestId(response);
     const request = context.switchToHttp().getRequest<RequestWithMethod>();
 
     return next.handle().pipe(

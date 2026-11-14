@@ -101,6 +101,19 @@
       "ts"
     ],
     "rootDir": "src",
+    "moduleNameMapper": {
+      "^@auth/(.*)$": "<rootDir>/modules/auth/$1",
+      "^@users/(.*)$": "<rootDir>/modules/users/$1",
+      "^@levels/(.*)$": "<rootDir>/modules/levels/$1",
+      "^@topics/(.*)$": "<rootDir>/modules/topics/$1",
+      "^@enums/(.*)$": "<rootDir>/common/enums/$1",
+      "^@guards/(.*)$": "<rootDir>/common/guards/$1",
+      "^@decorators/(.*)$": "<rootDir>/common/decorators/$1",
+      "^@interfaces/(.*)$": "<rootDir>/common/interfaces/$1",
+      "^@upload/(.*)$": "<rootDir>/modules/upload/$1",
+      "^@models/(.*)$": "<rootDir>/common/models/$1",
+      "^@services/(.*)$": "<rootDir>/services/$1"
+    },
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
