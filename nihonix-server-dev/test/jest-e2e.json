@@ -1,0 +1,37 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".e2e-spec.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/../src/$1",
+    "^@common/(.*)$": "<rootDir>/../src/common/$1",
+    "^@modules/(.*)$": "<rootDir>/../src/modules/$1",
+    "^@config/(.*)$": "<rootDir>/../src/config/$1",
+    "^@database/(.*)$": "<rootDir>/../src/database/$1",
+    "^@decorators/(.*)$": "<rootDir>/../src/common/decorators/$1",
+    "^@enums/(.*)$": "<rootDir>/../src/common/enums/$1",
+    "^@filters/(.*)$": "<rootDir>/../src/common/filters/$1",
+    "^@guards/(.*)$": "<rootDir>/../src/common/guards/$1",
+    "^@interceptors/(.*)$": "<rootDir>/../src/common/interceptors/$1",
+    "^@interfaces/(.*)$": "<rootDir>/../src/common/interfaces/$1",
+    "^@middlewares/(.*)$": "<rootDir>/../src/common/middlewares/$1",
+    "^@models/(.*)$": "<rootDir>/../src/common/models/$1",
+    "^@utils/(.*)$": "<rootDir>/../src/common/utils/$1",
+    "^@auth/(.*)$": "<rootDir>/../src/modules/auth/$1",
+    "^@users/(.*)$": "<rootDir>/../src/modules/users/$1",
+    "^@levels/(.*)$": "<rootDir>/../src/modules/levels/$1",
+    "^@topics/(.*)$": "<rootDir>/../src/modules/topics/$1",
+    "^@grammar-sub-topics/(.*)$": "<rootDir>/../src/modules/grammar-sub-topics/$1",
+    "^@vocabulary-items/(.*)$": "<rootDir>/../src/modules/vocabulary-items/$1",
+    "^@grammar-patterns/(.*)$": "<rootDir>/../src/modules/grammar-patterns/$1",
+    "^@flashcard-folders/(.*)$": "<rootDir>/../src/modules/flashcard-folders/$1",
+    "^@flashcards/(.*)$": "<rootDir>/../src/modules/flashcards/$1",
+    "^@entity-sync/(.*)$": "<rootDir>/../src/modules/entity-sync/$1",
+    "^@ai/(.*)$": "<rootDir>/../src/modules/ai/$1",
+    "^@services/(.*)$": "<rootDir>/../src/services/$1"
+  }
+}

@@ -1,0 +1,124 @@
+[
+  {
+    "slug": "vocab-kazoku",
+    "topic_slug": "family",
+    "level_code": "N5",
+    "romaji": "kazoku",
+    "kanji": "家族",
+    "kana": "かぞく",
+    "meaning": {
+      "vi": "gia đình",
+      "en": "family",
+      "jp": "家族"
+    },
+    "word_type": "noun",
+    "examples": [
+      {
+        "sentence_jp": "私の家族は三人です。",
+        "sentence_romaji": "Watashi no kazoku wa sannin desu.",
+        "sentence_vi": "Gia đình tôi có ba người.",
+        "sentence_en": "My family has three people."
+      },
+      {
+        "sentence_jp": "家族と旅行に行きました。",
+        "sentence_romaji": "Kazoku to ryokou ni ikimashita.",
+        "sentence_vi": "Tôi đã đi du lịch với gia đình.",
+        "sentence_en": "I went on a trip with my family."
+      }
+    ],
+    "order": 1
+  },
+  {
+    "slug": "vocab-chichi",
+    "topic_slug": "family",
+    "level_code": "N5",
+    "romaji": "chichi",
+    "kanji": "父",
+    "kana": "ちち",
+    "meaning": {
+      "vi": "cha, bố",
+      "en": "father, dad",
+      "jp": "父"
+    },
+    "word_type": "noun",
+    "examples": [
+      {
+        "sentence_jp": "父は医者です。",
+        "sentence_romaji": "Chichi wa isha desu.",
+        "sentence_vi": "Bố tôi là bác sĩ.",
+        "sentence_en": "My father is a doctor."
+      }
+    ],
+    "order": 2
+  },
+  {
+    "slug": "vocab-haha",
+    "topic_slug": "family",
+    "level_code": "N5",
+    "romaji": "haha",
+    "kanji": "母",
+    "kana": "はは",
+    "meaning": {
+      "vi": "mẹ",
+      "en": "mother, mom",
+      "jp": "母"
+    },
+    "word_type": "noun",
+    "examples": [
+      {
+        "sentence_jp": "母は料理が好きです。",
+        "sentence_romaji": "Haha wa ryouri ga suki desu.",
+        "sentence_vi": "Mẹ tôi thích nấu ăn.",
+        "sentence_en": "My mother likes cooking."
+      }
+    ],
+    "order": 3
+  },
+  {
+    "slug": "vocab-sofu",
+    "topic_slug": "family",
+    "level_code": "N5",
+    "romaji": "sofu",
+    "kanji": "祖父",
+    "kana": "そふ",
+    "meaning": {
+      "vi": "ông nội",
+      "en": "grandfather (paternal)",
+      "jp": "祖父"
+    },
+    "word_type": "noun",
+    "examples": [
+      {
+        "sentence_jp": "祖父は優しいです。",
+        "sentence_romaji": "Sofu wa yasashii desu.",
+        "sentence_vi": "Ông nội tôi rất tốt.",
+        "sentence_en": "My grandfather is kind."
+      }
+    ],
+    "order": 1
+  },
+  {
+    "slug": "vocab-ichi",
+    "topic_slug": "numbers",
+    "level_code": "N5",
+    "romaji": "ichi",
+    "kanji": "一",
+    "kana": "いち",
+    "meaning": {
+      "vi": "một, 1",
+      "en": "one, 1",
+      "jp": "一"
+    },
+    "word_type": "noun",
+    "examples": [
+      {
+        "sentence_jp": "一つください。",
+        "sentence_romaji": "Hitotsu kudasai.",
+        "sentence_vi": "Cho tôi một cái.",
+        "sentence_en": "One please."
+      }
+    ],
+    "order": 1
+  }
+]
+

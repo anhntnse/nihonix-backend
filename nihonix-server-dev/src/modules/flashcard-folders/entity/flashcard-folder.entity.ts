@@ -1,0 +1,32 @@
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    CreateDateColumn,
+    UpdateDateColumn,
+} from 'typeorm';
+
+@Entity('flashcard_folders')
+export class FlashcardFolder {
+    @PrimaryGeneratedColumn('uuid')
+    id!: string;
+
+    @Column({ type: 'text', unique: true, nullable: true })
+    slug!: string | null;
+
+    @Column({ type: 'text' })
+    name!: string;
+
+    @Column({ type: 'text', nullable: true })
+    description!: string | null;
+
+    @Column({ type: 'int', default: 1 })
+    order!: number;
+
+    @CreateDateColumn({ type: 'timestamptz' })
+    created_at!: Date;
+
+    @UpdateDateColumn({ type: 'timestamptz' })
+    updated_at!: Date;
+}
+

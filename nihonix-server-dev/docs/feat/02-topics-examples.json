@@ -1,0 +1,46 @@
+[
+    {
+        "slug": "family",
+        "level_code": "N5",
+        "title": {
+            "vi": "Gia đình",
+            "en": "Family",
+            "jp": "家族"
+        },
+        "icon_svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z'/></svg>",
+        "order": 1
+    },
+    {
+        "slug": "numbers",
+        "level_code": "N5",
+        "title": {
+            "vi": "Số đếm",
+            "en": "Numbers & Counting",
+            "jp": "数字"
+        },
+        "icon_svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M7 9h2v10H7zm4 0h2v10h-2zm4 0h2v10h-2z'/></svg>",
+        "order": 2
+    },
+    {
+        "slug": "colors",
+        "level_code": "N5",
+        "title": {
+            "vi": "Màu sắc",
+            "en": "Colors",
+            "jp": "色"
+        },
+        "icon_svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='none' stroke='currentColor' stroke-width='2'/></svg>",
+        "order": 3
+    },
+    {
+        "slug": "time-dates",
+        "level_code": "N4",
+        "title": {
+            "vi": "Thời gian và Ngày tháng",
+            "en": "Time & Dates",
+            "jp": "時間と日付"
+        },
+        "icon_svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10'/><path d='M12 6v6l4 2'/></svg>",
+        "order": 1
+    }
+]

@@ -1,0 +1,51 @@
+[
+  {
+    "slug": "folder-family-words",
+    "name": {
+      "vi": "Từ vựng về gia đình",
+      "en": "Family Words",
+      "jp": "家族の言葉"
+    },
+    "description": {
+      "vi": "Flashcard về các từ vựng liên quan đến gia đình",
+      "en": "Flashcards for family-related vocabulary",
+      "jp": "家族関連の語彙のフラッシュカード"
+    },
+    "order": 1,
+    "created_at": "2025-01-22T09:00:00Z",
+    "updated_at": "2025-01-22T09:00:00Z"
+  },
+  {
+    "slug": "folder-numbers",
+    "name": {
+      "vi": "Số đếm",
+      "en": "Numbers",
+      "jp": "数字"
+    },
+    "description": {
+      "vi": "Flashcard về số đếm tiếng Nhật",
+      "en": "Flashcards for Japanese numbers",
+      "jp": "日本語の数字のフラッシュカード"
+    },
+    "order": 2,
+    "created_at": "2025-01-22T09:00:00Z",
+    "updated_at": "2025-01-22T09:00:00Z"
+  },
+  {
+    "slug": "folder-daily-vocabulary",
+    "name": {
+      "vi": "Từ vựng hàng ngày",
+      "en": "Daily Vocabulary",
+      "jp": "日常語彙"
+    },
+    "description": {
+      "vi": "Các từ vựng thường dùng trong cuộc sống hàng ngày",
+      "en": "Common vocabulary used in daily life",
+      "jp": "日常生活でよく使われる語彙"
+    },
+    "order": 3,
+    "created_at": "2025-01-22T09:00:00Z",
+    "updated_at": "2025-01-22T09:00:00Z"
+  }
+]
+

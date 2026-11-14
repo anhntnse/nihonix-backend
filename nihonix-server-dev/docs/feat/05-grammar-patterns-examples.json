@@ -1,0 +1,105 @@
+[
+  {
+    "slug": "grammar-wa-desu",
+    "grammar_sub_topic_slug": "basic-patterns",
+    "topic_slug": "family",
+    "level_code": "N5",
+    "pattern_jp": "〜は〜です",
+    "pattern_romaji": "〜wa〜desu",
+    "explanation": {
+      "vi": "Cấu trúc cơ bản để giới thiệu hoặc mô tả. 'は' là chủ ngữ, 'です' là động từ 'là'.",
+      "en": "Basic structure for introduction or description. 'は' is the topic marker, 'です' means 'to be'.",
+      "jp": "基本的な紹介や説明の構造。'は'は主題、'です'は'である'という意味。"
+    },
+    "usage_examples": [
+      {
+        "sentence_jp": "私は学生です。",
+        "sentence_romaji": "Watashi wa gakusei desu.",
+        "sentence_vi": "Tôi là học sinh.",
+        "sentence_en": "I am a student."
+      },
+      {
+        "sentence_jp": "これは本です。",
+        "sentence_romaji": "Kore wa hon desu.",
+        "sentence_vi": "Đây là quyển sách.",
+        "sentence_en": "This is a book."
+      }
+    ],
+    "conjugation_rules": {
+      "affirmative": "〜です",
+      "negative": "〜ではありません",
+      "past": "〜でした",
+      "past_negative": "〜ではありませんでした"
+    },
+    "level_difficulty": "beginner",
+    "grammar_points": ["topic_marker", "copula", "introduction"],
+    "order": 1
+  },
+  {
+    "slug": "grammar-ga-suki",
+    "grammar_sub_topic_slug": "relationships",
+    "topic_slug": "family",
+    "level_code": "N5",
+    "pattern_jp": "〜が好きです",
+    "pattern_romaji": "〜ga suki desu",
+    "explanation": {
+      "vi": "Cấu trúc để diễn đạt sở thích. 'が' là trợ từ, '好き' nghĩa là 'thích'.",
+      "en": "Structure to express likes. 'が' is a particle, '好き' means 'to like'.",
+      "jp": "好みを表現する構造。'が'は助詞、'好き'は'好きだ'という意味。"
+    },
+    "usage_examples": [
+      {
+        "sentence_jp": "私は本が好きです。",
+        "sentence_romaji": "Watashi wa hon ga suki desu.",
+        "sentence_vi": "Tôi thích sách.",
+        "sentence_en": "I like books."
+      },
+      {
+        "sentence_jp": "母は料理が好きです。",
+        "sentence_romaji": "Haha wa ryouri ga suki desu.",
+        "sentence_vi": "Mẹ tôi thích nấu ăn.",
+        "sentence_en": "My mother likes cooking."
+      }
+    ],
+    "conjugation_rules": {
+      "affirmative": "〜が好きです",
+      "negative": "〜が好きではありません",
+      "past": "〜が好きでした",
+      "past_negative": "〜が好きではありませんでした"
+    },
+    "level_difficulty": "beginner",
+    "grammar_points": ["particle_ga", "likes_dislikes", "adjectives"],
+    "order": 1
+  },
+  {
+    "slug": "grammar-ni-iku",
+    "grammar_sub_topic_slug": "time-expressions",
+    "topic_slug": "time-dates",
+    "level_code": "N4",
+    "pattern_jp": "〜に行きます",
+    "pattern_romaji": "〜ni ikimasu",
+    "explanation": {
+      "vi": "Cấu trúc diễn đạt đi đâu. 'に' là trợ từ chỉ đích đến, '行きます' nghĩa là 'đi'.",
+      "en": "Structure to express going somewhere. 'に' is a particle indicating destination, '行きます' means 'to go'.",
+      "jp": "どこへ行くかを表現する構造。'に'は目的地を示す助詞、'行きます'は'行く'という意味。"
+    },
+    "usage_examples": [
+      {
+        "sentence_jp": "学校に行きます。",
+        "sentence_romaji": "Gakkou ni ikimasu.",
+        "sentence_vi": "Tôi đi học.",
+        "sentence_en": "I go to school."
+      }
+    ],
+    "conjugation_rules": {
+      "affirmative": "〜に行きます",
+      "negative": "〜に行きません",
+      "past": "〜に行きました",
+      "past_negative": "〜に行きませんでした"
+    },
+    "level_difficulty": "intermediate",
+    "grammar_points": ["particle_ni", "motion_verbs", "destination"],
+    "order": 1
+  }
+]
+

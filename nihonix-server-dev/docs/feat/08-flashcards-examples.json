@@ -1,0 +1,149 @@
+[
+    {
+        "slug": "flashcard-kazoku",
+        "folder_slug": "folder-family-words",
+        "front": {
+            "jp": "家族",
+            "romaji": "kazoku",
+            "kana": "かぞく"
+        },
+        "back": {
+            "meaning": {
+                "vi": "gia đình",
+                "en": "family",
+                "jp": "家族"
+            },
+            "examples": [
+                {
+                    "sentence_jp": "私の家族は三人です。",
+                    "sentence_romaji": "Watashi no kazoku wa sannin desu.",
+                    "sentence_vi": "Gia đình tôi có ba người.",
+                    "sentence_en": "My family has three people."
+                },
+                {
+                    "sentence_jp": "家族と旅行に行きました。",
+                    "sentence_romaji": "Kazoku to ryokou ni ikimashita.",
+                    "sentence_vi": "Tôi đã đi du lịch với gia đình.",
+                    "sentence_en": "I went on a trip with my family."
+                }
+            ]
+        },
+        "order": 1,
+        "created_at": "2025-01-22T09:10:00Z",
+        "updated_at": "2025-01-22T09:10:00Z"
+    },
+    {
+        "slug": "flashcard-chichi",
+        "folder_slug": "folder-family-words",
+        "front": {
+            "jp": "父",
+            "romaji": "chichi",
+            "kana": "ちち"
+        },
+        "back": {
+            "meaning": {
+                "vi": "cha, bố",
+                "en": "father, dad",
+                "jp": "父"
+            },
+            "examples": [
+                {
+                    "sentence_jp": "父は医者です。",
+                    "sentence_romaji": "Chichi wa isha desu.",
+                    "sentence_vi": "Bố tôi là bác sĩ.",
+                    "sentence_en": "My father is a doctor."
+                }
+            ]
+        },
+        "order": 2,
+        "created_at": "2025-01-22T09:10:00Z",
+        "updated_at": "2025-01-22T09:10:00Z"
+    },
+    {
+        "slug": "flashcard-haha",
+        "folder_slug": "folder-family-words",
+        "front": {
+            "jp": "母",
+            "romaji": "haha",
+            "kana": "はは"
+        },
+        "back": {
+            "meaning": {
+                "vi": "mẹ",
+                "en": "mother, mom",
+                "jp": "母"
+            },
+            "examples": [
+                {
+                    "sentence_jp": "母は料理が好きです。",
+                    "sentence_romaji": "Haha wa ryouri ga suki desu.",
+                    "sentence_vi": "Mẹ tôi thích nấu ăn.",
+                    "sentence_en": "My mother likes cooking."
+                }
+            ]
+        },
+        "order": 3,
+        "created_at": "2025-01-22T09:10:00Z",
+        "updated_at": "2025-01-22T09:10:00Z"
+    },
+    {
+        "slug": "flashcard-ichi",
+        "folder_slug": "folder-numbers",
+        "front": {
+            "jp": "一",
+            "romaji": "ichi",
+            "kana": "いち"
+        },
+        "back": {
+            "meaning": {
+                "vi": "một, 1",
+                "en": "one, 1",
+                "jp": "一"
+            },
+            "examples": [
+                {
+                    "sentence_jp": "一つください。",
+                    "sentence_romaji": "Hitotsu kudasai.",
+                    "sentence_vi": "Cho tôi một cái.",
+                    "sentence_en": "One please."
+                },
+                {
+                    "sentence_jp": "一時間かかりました。",
+                    "sentence_romaji": "Ichijikan kakarimashita.",
+                    "sentence_vi": "Mất một giờ.",
+                    "sentence_en": "It took one hour."
+                }
+            ]
+        },
+        "order": 1,
+        "created_at": "2025-01-22T09:15:00Z",
+        "updated_at": "2025-01-22T09:15:00Z"
+    },
+    {
+        "slug": "flashcard-ni",
+        "folder_slug": "folder-numbers",
+        "front": {
+            "jp": "二",
+            "romaji": "ni",
+            "kana": "に"
+        },
+        "back": {
+            "meaning": {
+                "vi": "hai, 2",
+                "en": "two, 2",
+                "jp": "二"
+            },
+            "examples": [
+                {
+                    "sentence_jp": "二つください。",
+                    "sentence_romaji": "Futatsu kudasai.",
+                    "sentence_vi": "Cho tôi hai cái.",
+                    "sentence_en": "Two please."
+                }
+            ]
+        },
+        "order": 2,
+        "created_at": "2025-01-22T09:15:00Z",
+        "updated_at": "2025-01-22T09:15:00Z"
+    }
+]

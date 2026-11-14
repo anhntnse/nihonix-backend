@@ -1,0 +1,75 @@
+[
+  {
+    "entity_kind": "level",
+    "entity_key": "N5",
+    "row_etag": "lv-N5-r1",
+    "updated_at": "2025-01-15T10:00:00Z",
+    "is_deleted": false,
+    "moved_to_key": null
+  },
+  {
+    "entity_kind": "topic",
+    "entity_key": "family",
+    "row_etag": "tp-family-r2",
+    "updated_at": "2025-01-20T14:30:00Z",
+    "is_deleted": false,
+    "moved_to_key": null
+  },
+  {
+    "entity_kind": "grammar_sub_topic",
+    "entity_key": "basic-patterns",
+    "row_etag": "gst-basic-patterns-r1",
+    "updated_at": "2025-01-23T10:00:00Z",
+    "is_deleted": false,
+    "moved_to_key": null
+  },
+  {
+    "entity_kind": "vocabulary_item",
+    "entity_key": "vocab-kazoku",
+    "row_etag": "vi-vocab-kazoku-r3",
+    "updated_at": "2025-01-22T09:20:00Z",
+    "is_deleted": false,
+    "moved_to_key": null
+  },
+  {
+    "entity_kind": "grammar_pattern",
+    "entity_key": "grammar-wa-desu",
+    "row_etag": "gp-grammar-wa-desu-r1",
+    "updated_at": "2025-01-22T10:00:00Z",
+    "is_deleted": false,
+    "moved_to_key": null
+  },
+  {
+    "entity_kind": "vocabulary_item",
+    "entity_key": "old-vocab-slug",
+    "row_etag": "vi-old-vocab-slug-r5",
+    "updated_at": "2025-01-25T15:00:00Z",
+    "is_deleted": true,
+    "moved_to_key": null
+  },
+  {
+    "entity_kind": "grammar_pattern",
+    "entity_key": "old-grammar-slug",
+    "row_etag": "gp-old-grammar-slug-r4",
+    "updated_at": "2025-01-24T11:00:00Z",
+    "is_deleted": false,
+    "moved_to_key": "new-grammar-slug"
+  },
+  {
+    "entity_kind": "flashcard_folder",
+    "entity_key": "folder-family-words",
+    "row_etag": "ff-folder-family-words-r1",
+    "updated_at": "2025-01-22T09:00:00Z",
+    "is_deleted": false,
+    "moved_to_key": null
+  },
+  {
+    "entity_kind": "flashcard",
+    "entity_key": "flashcard-kazoku",
+    "row_etag": "fc-flashcard-kazoku-r1",
+    "updated_at": "2025-01-22T09:10:00Z",
+    "is_deleted": false,
+    "moved_to_key": null
+  }
+]
+

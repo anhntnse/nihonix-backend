@@ -1,0 +1,36 @@
+[
+  {
+    "slug": "basic-patterns",
+    "topic_slug": "family",
+    "level_code": "N5",
+    "title": {
+      "vi": "Cấu trúc cơ bản",
+      "en": "Basic Patterns",
+      "jp": "基本的な構造"
+    },
+    "order": 1
+  },
+  {
+    "slug": "relationships",
+    "topic_slug": "family",
+    "level_code": "N5",
+    "title": {
+      "vi": "Quan hệ",
+      "en": "Relationships",
+      "jp": "関係"
+    },
+    "order": 2
+  },
+  {
+    "slug": "time-expressions",
+    "topic_slug": "time-dates",
+    "level_code": "N4",
+    "title": {
+      "vi": "Diễn đạt thời gian",
+      "en": "Time Expressions",
+      "jp": "時間表現"
+    },
+    "order": 1
+  }
+]
+

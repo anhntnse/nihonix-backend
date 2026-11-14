@@ -1,0 +1,47 @@
+[
+    {
+        "code": "N5",
+        "name": {
+            "vi": "Sơ cấp N5",
+            "en": "Beginner N5",
+            "jp": "初級 N5"
+        },
+        "updated_at": "2025-01-15T10:00:00Z"
+    },
+    {
+        "code": "N4",
+        "name": {
+            "vi": "Sơ trung cấp N4",
+            "en": "Elementary N4",
+            "jp": "初級N4"
+        },
+        "updated_at": "2025-01-15T10:00:00Z"
+    },
+    {
+        "code": "N3",
+        "name": {
+            "vi": "Trung cấp N3",
+            "en": "Intermediate N3",
+            "jp": "中級 N3"
+        },
+        "updated_at": "2025-01-15T10:00:00Z"
+    },
+    {
+        "code": "N2",
+        "name": {
+            "vi": "Trung thượng cấp N2",
+            "en": "Upper Intermediate N2",
+            "jp": "中上級 N2"
+        },
+        "updated_at": "2025-01-15T10:00:00Z"
+    },
+    {
+        "code": "N1",
+        "name": {
+            "vi": "Thượng cấp N1",
+            "en": "Advanced N1",
+            "jp": "上級 N1"
+        },
+        "updated_at": "2025-01-15T10:00:00Z"
+    }
+]
