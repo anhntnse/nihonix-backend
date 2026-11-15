@@ -14,6 +14,26 @@ export function contentVersion(data: unknown): string {
 @Injectable()
 export class LearningContentService {
   constructor(private readonly database: DataSource) {}
+  async manifest() {
+    return this.database.transaction('REPEATABLE READ',async manager=>{
+      const collections:any[]=[];
+      const definitions:any[]=[
+        ['levels', (await import('../levels/entity/level.entity')).Level],
+        ['topics',Topic],['vocabulary-items',VocabularyItem],['vocabulary-sets',VocabularySet],
+        ['grammar-sub-topics',GrammarSubTopic],['grammar-patterns',GrammarPattern],
+      ];
+      for(const [kind,entity] of definitions) {
+        const rows:any[]=await manager.getRepository(entity).find();
+        const entries=rows.map(row=>({
+          id:row.id || row.slug || row.code,slug:row.slug || row.code,level_code:row.level_code || row.code || null,
+          topic_id:row.topic_id || null,topic_slug:row.topic_slug || null,title:row.title || row.name || null,
+          version:contentVersion(row),
+        })).sort((a,b)=>a.id.localeCompare(b.id));
+        collections.push({kind,entries});
+      }
+      return {schema_version:1,collections,version:contentVersion(collections)};
+    });
+  }
   private kind(value: string): ContentKind {
     if (!(contentKinds as readonly string[]).includes(value)) throw new NotFoundException('Content collection not found');
     return value as ContentKind;

@@ -5,7 +5,8 @@ import {
   CallHandler,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Response } from 'express';
+import { Response, Request } from 'express';
+import { createHash } from 'crypto';
 import { requestId } from '../request-id';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -38,6 +39,14 @@ export class ResponseInterceptor<T>
 
     return next.handle().pipe(
       map((data: unknown): ApiResponse<T> => {
+        const httpRequest = context.switchToHttp().getRequest<Request>();
+        if (httpRequest.method === 'GET' && /^\/api\/(catalog|levels|topics)(\/|$)/.test(httpRequest.path)) {
+          const tag = '"' + createHash('sha256').update(JSON.stringify(data)).digest('hex') + '"';
+          response.setHeader('ETag',tag);
+          response.setHeader('Cache-Control','private, no-cache');
+          const matches = String(httpRequest.headers['if-none-match'] || '').split(',').map(t=>t.trim().replace(/^W\//,''));
+          if(matches.includes(tag) || matches.includes('*')) response.status(304);
+        }
         // Don't transform if data is already in our format
         if (data && typeof data === 'object' && 'success' in data) {
           return data as ApiResponse<T>;

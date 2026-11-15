@@ -6,6 +6,8 @@ import { LearningQueryDto } from './learning-query.dto';
 @Controller('catalog')
 export class LearningContentController {
   constructor(private readonly content: LearningContentService) {}
+  @Get('manifest')
+  manifest() { return this.content.manifest(); }
   @Get(':kind')
   page(@Param('kind') kind: string,@Query() query: LearningQueryDto) { return this.content.page(kind,query); }
   @Get(':kind/:identifier')

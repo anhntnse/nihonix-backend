@@ -87,7 +87,7 @@ export class EntitySyncController {
       
       // ETag doesn't match - return entity with new ETag
       res?.setHeader('ETag', result.etag);
-      return result.entity;
+      return res ? res.status(HttpStatus.OK).json({ success:true,message:'Content retrieved',data:result.entity,errors:null,statusCode:200 }) : result.entity;
     } catch (error) {
       throw new NotFoundException(`Entity ${entityKey} not found`);
     }

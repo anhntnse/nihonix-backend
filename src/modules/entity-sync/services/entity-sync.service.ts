@@ -84,7 +84,7 @@ export class EntitySyncService {
     
     // Generate or get current ETag
     const currentETag = syncRecord?.row_etag || 
-      this.etagService.generateETag(entity, syncRecord?.updated_at || new Date());
+      this.etagService.generateETag(entity, syncRecord?.updated_at || new Date(0));
     
     // If client ETag matches, return null (304 Not Modified)
     if (clientETag && clientETag === currentETag) {
