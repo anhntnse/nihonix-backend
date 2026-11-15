@@ -2,6 +2,8 @@
 
 Backend API cho ứng dụng học tiếng Nhật.
 
+[Sprint07 AI/quota/practice handoff](SPRINT_07.md): atomic quota ledger, validated generation, private practice/grading and explicit flashcard previews.
+
 ## 🛠️ Tech Stack
 
 - **NestJS** - Backend framework
