@@ -69,7 +69,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout user' })
   @ApiOkResponse({ description: 'Logged out successfully' })
   async logout(@Request() req, @Body() logoutDto: LogoutDto) {
-    return this.authService.logout(req.user.id, logoutDto.refreshToken);
+    return this.authService.logout(req.user.id, logoutDto.refreshToken, req.user.session_id);
   }
 
   @Post('me')

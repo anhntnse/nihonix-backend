@@ -173,7 +173,12 @@ export class AuthService {
     }
   }
 
-  async logout(userId: string, refreshToken: string) {
+  async logout(userId: string, refreshToken: string, authenticatedSessionId?: string) {
+    if (authenticatedSessionId) {
+      // JWT strategy already validated this session; refresh rotation must not change the logout target.
+      await this.sessionRepository.delete({ id: authenticatedSessionId, user_id: userId });
+      return { message: 'Logged out successfully' };
+    }
     const sessions = await this.sessionRepository.find({
       where: { user_id: userId },
     });
