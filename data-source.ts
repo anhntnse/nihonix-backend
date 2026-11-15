@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import {FlashcardSyncHead,FlashcardSyncReceipt} from './src/modules/flashcards/sync/flashcard-sync.entity';
 import { LearningProgress, ProgressReceipt } from './src/modules/progress/progress.entity';
 import { DataSource } from 'typeorm';
 import { config } from 'dotenv';
@@ -71,7 +72,7 @@ export const AppDataSource = new DataSource({
   password: process.env.DATABASE_PASSWORD || '',
   database: process.env.DATABASE_NAME || 'nihonix_db',
   entities: [
-    LearningProgress, ProgressReceipt,
+    LearningProgress, ProgressReceipt, FlashcardSyncHead, FlashcardSyncReceipt,
     User,
     UserAuth,
     Session,

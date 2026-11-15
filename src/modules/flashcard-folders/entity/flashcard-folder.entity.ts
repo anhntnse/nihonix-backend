@@ -1,3 +1,5 @@
+import { User } from '../../users/entity/user.entity';
+import { ManyToOne, JoinColumn } from 'typeorm';
 import {
     Entity,
     PrimaryGeneratedColumn,
@@ -10,6 +12,13 @@ import {
 export class FlashcardFolder {
     @PrimaryGeneratedColumn('uuid')
     id!: string;
+
+    @Column({ type: 'uuid', nullable: true })
+    user_id!: string | null;
+
+    @ManyToOne(() => User, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'user_id' })
+    user!: User;
 
     @Column({ type: 'text', unique: true, nullable: true })
     slug!: string | null;
