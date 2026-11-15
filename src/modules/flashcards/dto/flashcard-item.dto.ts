@@ -1,3 +1,4 @@
+import {FlashcardFaceDto} from '../sync/flashcard-sync.dto';
 import {
   IsNotEmpty,
   IsObject,
@@ -27,7 +28,7 @@ export class FlashcardItemDto {
   })
   @IsNotEmpty()
   @IsObject()
-  front!: Record<string, any>;
+  front!: FlashcardFaceDto;
 
   @ApiProperty({
     description: 'Back side of flashcard',
@@ -35,7 +36,7 @@ export class FlashcardItemDto {
   })
   @IsNotEmpty()
   @IsObject()
-  back!: Record<string, any>;
+  back!: FlashcardFaceDto;
 
   @ApiProperty({
     description: 'Display order (default: 1)',

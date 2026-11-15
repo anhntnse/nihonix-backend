@@ -19,6 +19,7 @@
     "test:sprint03": "ts-node -r tsconfig-paths/register test/sprint03.integration.ts",
     "test:sprint04": "ts-node -r tsconfig-paths/register test/sprint04.integration.ts",
     "test:sprint05": "ts-node -r tsconfig-paths/register test/sprint05.integration.ts",
+    "test:sprint06": "ts-node -r tsconfig-paths/register test/sprint06.integration.ts",
     "test:api": "ts-node -r tsconfig-paths/register scripts/test-api.ts",
     "test:auth": "ts-node -r tsconfig-paths/register scripts/test-auth-flow.ts",
     "start:dev": "cross-env NODE_ENV=development nest start --watch --preserveWatchOutput",

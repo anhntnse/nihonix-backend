@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import {configureFlashcardBodies} from './modules/flashcards/sync/flashcard-body-parser';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -7,6 +8,7 @@ import { ResponseInterceptor, GlobalExceptionFilter } from './common/index';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  configureFlashcardBodies(app);
   const port = process.env.PORT ?? 3010;
 
   app.enableShutdownHooks();

@@ -1,3 +1,4 @@
+import {FlashcardSyncModule} from './sync/flashcard-sync.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Flashcard } from './entity/flashcard.entity';
@@ -11,6 +12,7 @@ import { AiModule } from '@ai/ai.module';
   imports: [
     TypeOrmModule.forFeature([Flashcard, FlashcardSet, FlashcardFolder]),
     AiModule,
+    FlashcardSyncModule,
   ],
   controllers: [FlashcardsController],
   providers: [FlashcardsService],

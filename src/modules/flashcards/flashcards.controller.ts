@@ -12,6 +12,8 @@ import {
   UseGuards,
   UseInterceptors,
   ClassSerializerInterceptor,
+  Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { FlashcardsService } from './services/flashcards.service';
@@ -39,8 +41,8 @@ export class FlashcardsController {
     description: 'Flashcards created successfully',
     type: BulkCreateResponseDto,
   })
-  async bulkCreate(@Body() bulkDto: BulkCreateFlashcardsDto) {
-    const result = await this.flashcardsService.bulkCreate(bulkDto);
+  async bulkCreate(@Body() bulkDto: BulkCreateFlashcardsDto, @Request() req) {
+    const result = await this.flashcardsService.bulkCreate(bulkDto, req.user.id);
     
     // Remove set_id field from each card in response
     return {
@@ -59,8 +61,8 @@ export class FlashcardsController {
     description: 'Flashcards generated successfully',
     type: BulkCreateResponseDto,
   })
-  async generateFlashcards(@Body() generateDto: GenerateFlashcardsDto) {
-    const result = await this.flashcardsService.generateFlashcards(generateDto);
+  async generateFlashcards(@Body() generateDto: GenerateFlashcardsDto, @Request() req) {
+    const result = await this.flashcardsService.generateFlashcards(generateDto, req.user.id);
     
     // Remove set_id field from each card in response
     return {
@@ -79,8 +81,8 @@ export class FlashcardsController {
     description: 'Flashcards updated successfully',
     type: BulkUpdateResponseDto,
   })
-  async bulkUpdate(@Body() bulkDto: BulkUpdateFlashcardsDto) {
-    const result = await this.flashcardsService.bulkUpdate(bulkDto);
+  async bulkUpdate(@Body() bulkDto: BulkUpdateFlashcardsDto, @Request() req) {
+    const result = await this.flashcardsService.bulkUpdate(bulkDto, req.user.id);
     
     // Remove set_id field from each card in response
     return {
@@ -97,16 +99,16 @@ export class FlashcardsController {
   @ApiOperation({ summary: 'Get all flashcard sets in a folder' })
   @ApiOkResponse({ description: 'List of flashcard sets with card counts' })
   @ApiQuery({ name: 'folderId', required: true, description: 'Folder ID (UUID)' })
-  async getSetsByFolder(@Query('folderId') folderId: string) {
-    return this.flashcardsService.getSetsByFolder(folderId);
+  async getSetsByFolder(@Query('folderId', ParseUUIDPipe) folderId: string, @Request() req) {
+    return this.flashcardsService.getSetsByFolder(folderId, req.user.id);
   }
 
   @Get('sets/:setId/cards')
   @ApiOperation({ summary: 'Get all cards in a flashcard set' })
   @ApiOkResponse({ description: 'List of flashcards in the set' })
   @ApiParam({ name: 'setId', description: 'Flashcard Set ID (UUID)' })
-  async getCardsBySet(@Param('setId') setId: string) {
-    return this.flashcardsService.getCardsBySet(setId);
+  async getCardsBySet(@Param('setId', ParseUUIDPipe) setId: string, @Request() req) {
+    return this.flashcardsService.getCardsBySet(setId, req.user.id);
   }
 
   @Delete('sets/:setId')
@@ -114,8 +116,8 @@ export class FlashcardsController {
   @ApiOperation({ summary: 'Delete a flashcard set (cascade delete all cards)' })
   @ApiOkResponse({ description: 'Flashcard set deleted successfully' })
   @ApiParam({ name: 'setId', description: 'Flashcard Set ID (UUID)' })
-  async deleteSet(@Param('setId') setId: string) {
-    await this.flashcardsService.deleteSet(setId);
+  async deleteSet(@Param('setId', ParseUUIDPipe) setId: string, @Request() req) {
+    await this.flashcardsService.deleteSet(setId, req.user.id);
     return { message: 'Flashcard set deleted successfully' };
   }
 }

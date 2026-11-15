@@ -54,8 +54,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
     } else if (exception instanceof Error) {
       const invalidJson = exception.name === 'SyntaxError';
-      status = invalidJson ? HttpStatus.BAD_REQUEST : HttpStatus.INTERNAL_SERVER_ERROR;
-      message = invalidJson ? 'Invalid JSON format in request body' : 'Internal server error';
+      const tooLarge = (exception as Error & { type?: string }).type === 'entity.too.large';
+      status = tooLarge ? HttpStatus.PAYLOAD_TOO_LARGE : invalidJson ? HttpStatus.BAD_REQUEST : HttpStatus.INTERNAL_SERVER_ERROR;
+      message = tooLarge ? 'Request body exceeds the allowed size' : invalidJson ? 'Invalid JSON format in request body' : 'Internal server error';
       errors = null;
     } else {
       message = 'Unknown error occurred';

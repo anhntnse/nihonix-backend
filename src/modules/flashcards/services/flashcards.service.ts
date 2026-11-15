@@ -1,3 +1,5 @@
+import {randomUUID} from 'crypto';
+import {FlashcardSyncService} from '../sync/flashcard-sync.service';
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -29,254 +31,42 @@ export class FlashcardsService {
     private dataSource: DataSource,
     private aiGenerationService: AiGenerationService,
     private aiJsonParserService: AiJsonParserService,
+    private readonly sync: FlashcardSyncService,
   ) {}
 
-  /**
-   * Get all flashcard sets in a folder
-   */
-  async getSetsByFolder(folderId: string): Promise<Array<{
-    id: string;
-    name: string;
-    folder_id: string;
-    order: number;
-    card_count: number;
-    created_at: Date;
-    updated_at: Date;
-  }>> {
-    // Verify folder exists
-    const folder = await this.flashcardFolderRepository.findOne({
-      where: { id: folderId },
-    });
-
-    if (!folder) {
-      throw new NotFoundException(`Folder with id ${folderId} not found`);
-    }
-
-    // Get all sets in folder with card count
-    const sets = await this.flashcardSetRepository
-      .createQueryBuilder('set')
-      .leftJoin('set.flashcards', 'card')
-      .where('set.folder_id = :folderId', { folderId })
-      .select([
-        'set.id',
-        'set.name',
-        'set.folder_id',
-        'set.order',
-        'set.created_at',
-        'set.updated_at',
-      ])
-      .addSelect('COUNT(card.id)', 'card_count')
-      .groupBy('set.id')
-      .orderBy('set.order', 'ASC')
-      .addOrderBy('set.created_at', 'ASC')
-      .getRawMany();
-
-    return sets.map(set => ({
-      id: set.set_id,
-      name: set.set_name,
-      folder_id: set.set_folder_id,
-      order: set.set_order,
-      card_count: parseInt(set.card_count) || 0,
-      created_at: set.set_created_at,
-      updated_at: set.set_updated_at,
-    }));
+  async getSetsByFolder(folderId:string,user:string):Promise<any[]> {
+    return (await this.sync.sets(user,folderId)).map(({cards,...record})=>record);
   }
-
-  /**
-   * Get all cards in a flashcard set
-   */
-  async getCardsBySet(setId: string): Promise<Flashcard[]> {
-    // Verify set exists
-    const set = await this.flashcardSetRepository.findOne({
-      where: { id: setId },
-    });
-
-    if (!set) {
-      throw new NotFoundException(`Flashcard set with id ${setId} not found`);
-    }
-
-    return this.flashcardRepository.find({
-      where: { set_id: setId },
-      order: { order: 'ASC', created_at: 'ASC' },
-    });
+  async getCardsBySet(setId:string,user:string):Promise<Flashcard[]> {
+    return (await this.sync.set(user,setId)).cards;
   }
-
-  /**
-   * Delete a flashcard set (cascade delete all cards in the set)
-   */
-  async deleteSet(setId: string): Promise<void> {
-    const set = await this.flashcardSetRepository.findOne({
-      where: { id: setId },
-    });
-
-    if (!set) {
-      throw new NotFoundException(`Flashcard set with id ${setId} not found`);
-    }
-
-    // Delete set (cards will be cascade deleted by foreign key constraint)
-    await this.flashcardSetRepository.remove(set);
+  async deleteSet(setId:string,user:string):Promise<void> {
+    const current=await this.sync.set(user,setId);
+    await this.sync.legacy(user,{kind:'set',id:current.id,action:'delete',base_version:current.version});
   }
-
-  /**
-   * Bulk create flashcards (creates set first, then cards)
-   */
-  async bulkCreate(bulkDto: BulkCreateFlashcardsDto): Promise<{ 
-    set_id: string;
-    set_name: string;
-    created: number;
-    cards: Flashcard[];
-  }> {
-    // Verify folder exists
-    const folder = await this.flashcardFolderRepository.findOne({
-      where: { id: bulkDto.folder_id },
-    });
-
-    if (!folder) {
-      throw new NotFoundException(`Folder with id ${bulkDto.folder_id} not found`);
-    }
-
-    return this.dataSource.transaction(async (manager) => {
-      // 1. Create FlashcardSet first
-      const set = manager.create(FlashcardSet, {
-        folder_id: bulkDto.folder_id,
-        name: bulkDto.set_name,
-        order: 1,
-        slug: null,
-      });
-      const savedSet = await manager.save(FlashcardSet, set);
-
-      // 2. Create all cards with set_id
-      const cards = bulkDto.cards.map((cardDto, index) => 
-        manager.create(Flashcard, {
-          folder_id: bulkDto.folder_id,
-          set_id: savedSet.id,
-          front: cardDto.front,
-          back: cardDto.back,
-          order: cardDto.order ?? index + 1,
-          slug: null,
-        })
-      );
-
-      const savedCards = await manager.save(Flashcard, cards);
-
-      return {
-        set_id: savedSet.id,
-        set_name: savedSet.name,
-        created: savedCards.length,
-        cards: savedCards,
-      };
-    });
+  async bulkCreate(dto:BulkCreateFlashcardsDto,user:string) {
+    const folder=await this.sync.folder(user,dto.folder_id);
+    const cards=dto.cards.map((card,index)=>({...card,id:card.id??randomUUID(),order:card.order??index+1}));
+    const ack=await this.sync.legacy(user,{kind:'set',id:randomUUID(),action:'upsert',base_version:'0',
+      folder_id:folder.id,name:dto.set_name,cards});
+    return {set_id:ack.record.id,set_name:ack.record.name,created:ack.record.cards.length,cards:ack.record.cards};
   }
-
-  /**
-   * Bulk update flashcards in a set
-   * - Cards with id will be updated
-   * - Cards without id will be created
-   * - Existing cards not in array will be deleted
-   * - Optionally updates set name
-   */
-  async bulkUpdate(bulkDto: BulkUpdateFlashcardsDto): Promise<{
-    set_id: string;
-    set_name: string;
-    created: number;
-    updated: number;
-    deleted: number;
-    cards: Flashcard[];
-  }> {
-    // Verify set exists
-    const set = await this.flashcardSetRepository.findOne({
-      where: { id: bulkDto.set_id },
-    });
-
-    if (!set) {
-      throw new NotFoundException(`Set with id ${bulkDto.set_id} not found`);
-    }
-
-    return this.dataSource.transaction(async (manager) => {
-      // Update set name if provided
-      if (bulkDto.set_name) {
-        await manager.update(FlashcardSet, bulkDto.set_id, {
-          name: bulkDto.set_name,
-        });
-        set.name = bulkDto.set_name;
-      }
-
-      // Get existing cards in set
-      const existingCards = await manager.find(Flashcard, {
-        where: { set_id: bulkDto.set_id },
-      });
-
-      const existingCardIds = existingCards.map(c => c.id);
-      const requestCardIds = bulkDto.cards
-        .filter(c => c.id)
-        .map(c => c.id!);
-
-      // Find cards to delete
-      const cardsToDeleteIds = existingCardIds.filter(
-        id => !requestCardIds.includes(id)
-      );
-
-      // Separate cards to create and update
-      const cardsToCreate = bulkDto.cards.filter(c => !c.id);
-      const cardsToUpdate = bulkDto.cards.filter(c => c.id);
-
-      let createdCount = 0;
-      let updatedCount = 0;
-      let deletedCount = 0;
-
-      // Delete removed cards
-      if (cardsToDeleteIds.length > 0) {
-        await manager.delete(Flashcard, cardsToDeleteIds);
-        deletedCount = cardsToDeleteIds.length;
-      }
-
-      // Create new cards
-      if (cardsToCreate.length > 0) {
-        const newCards = cardsToCreate.map((cardDto, index) =>
-          manager.create(Flashcard, {
-            folder_id: set.folder_id,
-            set_id: bulkDto.set_id,
-            front: cardDto.front,
-            back: cardDto.back,
-            order: cardDto.order ?? (existingCards.length + index + 1),
-            slug: null,
-          })
-        );
-        await manager.save(Flashcard, newCards);
-        createdCount = newCards.length;
-      }
-
-      // Update existing cards
-      for (const cardDto of cardsToUpdate) {
-        await manager.update(Flashcard, cardDto.id!, {
-          front: cardDto.front,
-          back: cardDto.back,
-          order: cardDto.order,
-        });
-        updatedCount++;
-      }
-
-      // Get all cards in set after operations
-      const finalCards = await manager.find(Flashcard, {
-        where: { set_id: bulkDto.set_id },
-        order: { order: 'ASC', created_at: 'ASC' },
-      });
-
-      return {
-        set_id: set.id,
-        set_name: set.name,
-        created: createdCount,
-        updated: updatedCount,
-        deleted: deletedCount,
-        cards: finalCards,
-      };
-    });
+  async bulkUpdate(dto:BulkUpdateFlashcardsDto,user:string) {
+    const current=await this.sync.set(user,dto.set_id);
+    const existing=new Map<string,any>(current.cards.map((card:any)=>[card.id,card]));
+    if(dto.cards.some(card=>card.id&&!existing.has(card.id.toLowerCase()))) throw new BadRequestException('A card ID does not belong to this set');
+    const cards=dto.cards.map((card,index)=>({...card,id:card.id??randomUUID(),order:card.order??existing.get(card.id??'')?.order??index+1}));
+    const ack=await this.sync.legacy(user,{kind:'set',id:current.id,action:'upsert',base_version:current.version,
+      folder_id:current.folder_id,name:dto.set_name??current.name,order:current.order,cards});
+    const updated=cards.filter(card=>existing.has(card.id.toLowerCase())).length;
+    return {set_id:ack.record.id,set_name:ack.record.name,created:cards.length-updated,updated,
+      deleted:ack.deleted_ids.cards.length,cards:ack.record.cards};
   }
 
   /**
    * Generate flashcards using AI
    */
-  async generateFlashcards(dto: GenerateFlashcardsDto): Promise<{
+  async generateFlashcards(dto: GenerateFlashcardsDto, user:string): Promise<{
     set_id: string;
     set_name: string;
     created: number;
@@ -289,7 +79,7 @@ export class FlashcardsService {
 
       // Verify folder exists
       const folder = await this.flashcardFolderRepository.findOne({
-        where: { id: dto.folder_id },
+        where: { id: dto.folder_id, user_id: user },
       });
 
       if (!folder) {
@@ -317,7 +107,7 @@ export class FlashcardsService {
         cards: validCards,
       };
 
-      const result = await this.bulkCreate(bulkCreateDto);
+      const result = await this.bulkCreate(bulkCreateDto, user);
 
       return {
         set_id: result.set_id,
