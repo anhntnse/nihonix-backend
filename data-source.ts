@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { LearningProgress, ProgressReceipt } from './src/modules/progress/progress.entity';
 import { DataSource } from 'typeorm';
 import { config } from 'dotenv';
 import { register } from 'tsconfig-paths';
@@ -70,6 +71,7 @@ export const AppDataSource = new DataSource({
   password: process.env.DATABASE_PASSWORD || '',
   database: process.env.DATABASE_NAME || 'nihonix_db',
   entities: [
+    LearningProgress, ProgressReceipt,
     User,
     UserAuth,
     Session,

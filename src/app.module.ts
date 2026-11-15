@@ -1,3 +1,4 @@
+import { ProgressModule } from './modules/progress/progress.module';
 import { LearningContentModule } from './modules/learning-content/learning-content.module';
 import { AppConfigController } from './app-config.controller';
 import { Module } from '@nestjs/common';
@@ -34,6 +35,7 @@ import { PracticeModule } from './modules/practice/practice.module';
     DatabaseModule,
     LevelsModule,
     LearningContentModule,
+    ProgressModule,
     AuthModule,
     UsersModule,
     TopicsModule,
