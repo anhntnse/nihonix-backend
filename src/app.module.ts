@@ -1,3 +1,4 @@
+import { LearningContentModule } from './modules/learning-content/learning-content.module';
 import { AppConfigController } from './app-config.controller';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
@@ -32,6 +33,7 @@ import { PracticeModule } from './modules/practice/practice.module';
     }),
     DatabaseModule,
     LevelsModule,
+    LearningContentModule,
     AuthModule,
     UsersModule,
     TopicsModule,
