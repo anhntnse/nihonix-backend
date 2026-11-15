@@ -1,3 +1,4 @@
+import {LearningActivityEvent} from './activity.entity';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LearningStreaksController } from './learning-streaks.controller';
@@ -6,7 +7,7 @@ import { UserLearningStreak, UserLearningActivity } from './entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserLearningStreak, UserLearningActivity]),
+    TypeOrmModule.forFeature([UserLearningStreak, UserLearningActivity,LearningActivityEvent]),
   ],
   controllers: [LearningStreaksController],
   providers: [LearningStreaksService],

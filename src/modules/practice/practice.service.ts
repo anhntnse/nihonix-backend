@@ -1,3 +1,5 @@
+import {DEFAULT_LEARNING_SETTINGS} from '../users/dto/learning-settings.dto';
+import {localDay} from '../learning-streaks/activity-policy';
 import {Injectable,NotFoundException,BadRequestException,ConflictException} from '@nestjs/common';
 import {DataSource,EntityManager} from 'typeorm';
 import {randomUUID,createHash} from 'crypto';
@@ -63,7 +65,9 @@ export class PracticeService{
   const payload={session_id:dto.session_id,answers:[...dto.answers].map(a=>({exercise_id:a.exercise_id,user_answer:a.user_answer,time_spent:a.time_spent??0})).sort((a,b)=>a.exercise_id.localeCompare(b.exercise_id))};
   const hash=createHash('sha256').update(canonicalJson(payload)).digest('hex');
   return this.db.transaction(async m=>{
-   if(!await m.findOne(User,{where:{id:user},lock:{mode:'pessimistic_write'}}))throw new NotFoundException('Account not found');
+   const owner=await m.findOne(User,{where:{id:user},lock:{mode:'pessimistic_write'}});
+   if(!owner)throw new NotFoundException('Account not found');
+   const learningTimezone=typeof owner.learning_settings?.timezone==='string'?owner.learning_settings.timezone:DEFAULT_LEARNING_SETTINGS.timezone;
    const replay=await m.findOne(PracticeSubmission,{where:{user_id:user,request_id:requestId}});
    if(replay){if(replay.payload_hash!==hash)throw new ConflictException('Submission ID was already used with different answers');return replay.result;}
    const session=await m.findOne(PracticeSession,{where:{id:dto.session_id,user_id:user},relations:['exercises','topic']});
@@ -83,7 +87,9 @@ export class PracticeService{
     completion_id:completionId,...graded};
    await m.save(m.create(PracticeSubmission,{session_id:session.id,user_id:user,request_id:requestId,payload_hash:hash,result}));
    await m.save(m.create(PracticeCompletionEvent,{id:completionId,user_id:user,session_id:session.id,kind:'practice_completed',
-    completed_at:completed,duration_seconds:graded.total_time,schema_version:1,payload:{topic_id:session.topic_id,exercise_type:session.exercise_type,total:graded.total_exercises,correct:graded.correct_count}}));
+    completed_at:completed,duration_seconds:graded.total_time,schema_version:1,payload:{topic_id:session.topic_id,exercise_type:session.exercise_type,total:graded.total_exercises,correct:graded.correct_count,
+     timezone:learningTimezone,
+     activity_date:localDay(completed,learningTimezone)}}));
    return result;
   });
  }

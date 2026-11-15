@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import {NotificationDevice,ReminderAttempt} from './src/modules/notifications/device.entity';
+import {LearningActivityEvent} from './src/modules/learning-streaks/activity.entity';
 import {AiGenerationRequest} from './src/modules/ai/ai-request.entity';
 import {PracticeSubmission,PracticeCompletionEvent} from './src/modules/practice/entity/practice-submission.entity';
 import {FlashcardSyncHead,FlashcardSyncReceipt} from './src/modules/flashcards/sync/flashcard-sync.entity';
@@ -74,7 +76,7 @@ export const AppDataSource = new DataSource({
   password: process.env.DATABASE_PASSWORD || '',
   database: process.env.DATABASE_NAME || 'nihonix_db',
   entities: [
-    LearningProgress, ProgressReceipt, FlashcardSyncHead, FlashcardSyncReceipt, AiGenerationRequest, PracticeSubmission, PracticeCompletionEvent,
+    NotificationDevice, ReminderAttempt, LearningActivityEvent, LearningProgress, ProgressReceipt, FlashcardSyncHead, FlashcardSyncReceipt, AiGenerationRequest, PracticeSubmission, PracticeCompletionEvent,
     User,
     UserAuth,
     Session,

@@ -21,6 +21,9 @@
     "test:sprint05": "ts-node -r tsconfig-paths/register test/sprint05.integration.ts",
     "test:sprint06": "ts-node -r tsconfig-paths/register test/sprint06.integration.ts",
     "test:sprint07": "ts-node -r tsconfig-paths/register test/sprint07.integration.ts",
+    "test:sprint08": "ts-node -r tsconfig-paths/register test/sprint08.integration.ts",
+    "test:sprint09": "ts-node -r tsconfig-paths/register test/sprint09.ownership.integration.ts",
+    "check:firebase": "node scripts/check-firebase.cjs",
     "test:api": "ts-node -r tsconfig-paths/register scripts/test-api.ts",
     "test:auth": "ts-node -r tsconfig-paths/register scripts/test-auth-flow.ts",
     "start:dev": "cross-env NODE_ENV=development nest start --watch --preserveWatchOutput",
@@ -59,7 +62,9 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "cloudinary": "^2.8.0",
+    "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
+    "firebase-admin": "^14.5.1",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.10",
     "passport": "^0.7.0",
@@ -70,10 +75,9 @@
     "rxjs": "^7.8.1",
     "streamifier": "^0.1.1",
     "swagger-ui-express": "^5.0.1",
-    "typeorm": "^0.3.27",
-    "cross-env": "^10.1.0",
     "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0"
+    "tsconfig-paths": "^4.2.0",
+    "typeorm": "^0.3.27"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

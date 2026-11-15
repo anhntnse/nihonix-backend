@@ -1,3 +1,4 @@
+import {NotificationsModule} from './modules/notifications/notifications.module';
 import { ProgressModule } from './modules/progress/progress.module';
 import { LearningContentModule } from './modules/learning-content/learning-content.module';
 import { AppConfigController } from './app-config.controller';
@@ -36,6 +37,7 @@ import { PracticeModule } from './modules/practice/practice.module';
     LevelsModule,
     LearningContentModule,
     ProgressModule,
+    NotificationsModule,
     AuthModule,
     UsersModule,
     TopicsModule,

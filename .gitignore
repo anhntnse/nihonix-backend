@@ -62,3 +62,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # OpenAPI generated file
 openapi.json
+
+# Server credentials stay outside source control
+*firebase-adminsdk*.json
+service-account*.json
+.secrets/
