@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import {PracticeSubmission,PracticeCompletionEvent} from './entity/practice-submission.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PracticeSession } from './entity/practice-session.entity';
 import { PracticeExercise } from './entity/practice-exercise.entity';
@@ -14,6 +15,7 @@ import { AiModule } from '@ai/ai.module';
     TypeOrmModule.forFeature([
       PracticeSession,
       PracticeExercise,
+      PracticeSubmission,PracticeCompletionEvent,
       Topic,
       VocabularyItem,
       GrammarPattern,

@@ -1,175 +1,41 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { IAiProvider, AiMessage, AiProviderConfig, AiProviderResponse } from '../interfaces/ai-provider.interface';
-
-interface GeminiRequest {
-  contents: Array<{
-    parts: Array<{
-      text: string;
-    }>;
-  }>;
-  generationConfig?: {
-    temperature?: number;
-    maxOutputTokens?: number;
-  };
-}
-
-interface GeminiResponse {
-  candidates?: Array<{
-    content: {
-      parts: Array<{
-        text: string;
-      }>;
-    };
-    finishReason?: string;
-  }>;
-  usageMetadata?: {
-    promptTokenCount?: number;
-    candidatesTokenCount?: number;
-    totalTokenCount?: number;
-  };
-  error?: {
-    message: string;
-    code: number;
-  };
-}
+import {Injectable,Logger,HttpException} from '@nestjs/common';
+import {ConfigService} from '@nestjs/config';
+import {IAiProvider,AiMessage,AiProviderConfig,AiProviderResponse} from '../interfaces/ai-provider.interface';
 
 @Injectable()
 export class GeminiProvider implements IAiProvider {
-  private readonly logger = new Logger(GeminiProvider.name);
-  private readonly config: {
-    apiKey: string;
-    baseUrl: string;
-    defaultModel: string;
-    maxTokens: number;
-    temperature: number;
-    maxRetries: number;
-  };
-
-  constructor(private configService: ConfigService) {
-    this.config = {
-      apiKey: this.configService.get<string>('ai.apiKey') || '',
-      baseUrl: this.configService.get<string>('ai.apiUrl') || 'https://generativelanguage.googleapis.com/v1beta',
-      defaultModel: this.configService.get<string>('ai.model') || 'gemini-2.0-flash',
-      maxTokens: parseInt(process.env.AI_MAX_TOKENS || '2000', 10),
-      temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
-      maxRetries: 3,
-    };
-
-    if (!this.config.apiKey) {
-      this.logger.warn('Google Gemini API key is not configured');
-    }
+ private readonly logger=new Logger(GeminiProvider.name);
+ constructor(private readonly configService:ConfigService){}
+ async generate(messages:AiMessage[],config?:Partial<AiProviderConfig>):Promise<AiProviderResponse>{
+  const key=this.configService.get<string>('ai.apiKey')||'';
+  if(!key)throw new HttpException({code:'AI_UNAVAILABLE',message:'AI is not configured.'},503);
+  const base=this.configService.get<string>('ai.apiUrl')||'https://generativelanguage.googleapis.com/v1beta';
+  const model=config?.defaultModel||this.configService.get<string>('ai.model')||'gemini-2.0-flash';
+  const retries=Math.max(0,Math.min(config?.maxRetries??3,3));
+  for(let attempt=0;;attempt++){
+   try{
+    const response=await fetch(base.replace(/\/$/,'')+'/models/'+encodeURIComponent(model)+':generateContent',{
+     method:'POST',headers:{'X-goog-api-key':key,'Content-Type':'application/json'},
+     signal:AbortSignal.timeout(Math.min(Math.max(config?.timeoutMs??45000,1000),60000)),
+     body:JSON.stringify({contents:messages.map(m=>({parts:[{text:m.content}]})),
+      generationConfig:{temperature:config?.temperature??this.configService.get<number>('ai.temperature')??0.7,
+       maxOutputTokens:config?.maxTokens??this.configService.get<number>('ai.maxTokens')??2000}})
+    });
+    if(!response.ok)throw new HttpException({code:response.status===429?'AI_PROVIDER_BUSY':'AI_PROVIDER_UNAVAILABLE',message:'AI provider is unavailable.'},503);
+    const result:any=await response.json(),candidate=result.candidates?.[0];
+    if(candidate?.finishReason!=='STOP'||!Array.isArray(candidate.content?.parts))throw new HttpException({code:'AI_INVALID_OUTPUT',message:'AI output was incomplete.'},502);
+    const content=candidate.content.parts.filter((p:any)=>typeof p.text==='string'&&!p.thought).map((p:any)=>p.text).join('');
+    if(!content.trim()||content.length>500000)throw new HttpException({code:'AI_INVALID_OUTPUT',message:'AI output was invalid.'},502);
+    const usage=result.usageMetadata;
+    return {content,usage:usage?{prompt_tokens:usage.promptTokenCount,completion_tokens:usage.candidatesTokenCount,total_tokens:usage.totalTokenCount}:undefined};
+   }catch(error:any){
+    const failure=error instanceof HttpException?error:new HttpException({code:error?.name==='TimeoutError'||error?.name==='AbortError'?'AI_TIMEOUT':'AI_PROVIDER_UNAVAILABLE',message:'AI request could not complete.'},error?.name==='TimeoutError'||error?.name==='AbortError'?504:503);
+    if(attempt>=retries)throw failure;
+    this.logger.warn(JSON.stringify({event:'ai.provider_retry',attempt:attempt+1,status:failure.getStatus()}));
+    await this.delay(1000*(attempt+1));
+   }
   }
-
-  async generate(
-    messages: AiMessage[],
-    config?: Partial<AiProviderConfig>,
-  ): Promise<AiProviderResponse> {
-    const model = config?.defaultModel || this.config.defaultModel;
-    const request: GeminiRequest = {
-      contents: messages.map((msg) => ({
-        parts: [
-          {
-            text: msg.content,
-          },
-        ],
-      })),
-      generationConfig: {
-        temperature: config?.temperature ?? this.config.temperature,
-        maxOutputTokens: config?.maxTokens ?? this.config.maxTokens,
-      },
-    };
-
-    const response = await this.makeRequest(model, request);
-    return {
-      content: response.content,
-      usage: response.usage,
-    };
-  }
-
-  private async makeRequest(
-    model: string,
-    data: GeminiRequest,
-    retryCount: number = 0,
-  ): Promise<{ content: string; usage?: any }> {
-    try {
-      const url = `${this.config.baseUrl}/models/${model}:generateContent`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'X-goog-api-key': this.config.apiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        this.logger.error(`API request failed: ${response.status}`, errorData);
-        throw new BadRequestException(
-          `Google Gemini API error: ${errorData.error?.message || 'Unknown error'}`,
-        );
-      }
-
-      const result: GeminiResponse = await response.json();
-
-      if (result.error) {
-        throw new BadRequestException(`Google Gemini API error: ${result.error.message}`);
-      }
-
-      if (!result.candidates || result.candidates.length === 0) {
-        throw new BadRequestException('No response candidates returned from API');
-      }
-
-      const candidate = result.candidates[0];
-      const content = candidate.content.parts.map((part) => part.text).join('');
-
-      return {
-        content,
-        usage: result.usageMetadata
-          ? {
-              prompt_tokens: result.usageMetadata.promptTokenCount,
-              completion_tokens: result.usageMetadata.candidatesTokenCount,
-              total_tokens: result.usageMetadata.totalTokenCount,
-            }
-          : undefined,
-      };
-    } catch (error) {
-      this.logger.error(`Request failed (attempt ${retryCount + 1})`, error.stack);
-
-      if (retryCount < this.config.maxRetries) {
-        await this.delay(1000 * (retryCount + 1));
-        return this.makeRequest(model, data, retryCount + 1);
-      }
-
-      throw error;
-    }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  async healthCheck(): Promise<{ status: string; configured: boolean }> {
-    try {
-      if (!this.config.apiKey) {
-        return {
-          status: 'error',
-          configured: false,
-        };
-      }
-
-      return {
-        status: 'ok',
-        configured: true,
-      };
-    } catch (error) {
-      this.logger.error('Health check failed', error.stack);
-      return {
-        status: 'error',
-        configured: false,
-      };
-    }
-  }
+ }
+ private delay(ms:number):Promise<void>{return new Promise(resolve=>setTimeout(resolve,ms));}
+ async healthCheck(){const configured=Boolean(this.configService.get<string>('ai.apiKey'));return {status:configured?'ok':'unavailable',configured};}
 }
-

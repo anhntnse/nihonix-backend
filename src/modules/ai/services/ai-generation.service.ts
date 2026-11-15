@@ -7,6 +7,7 @@ export interface GenerateOptions {
   expectedCount?: number;
   tokensPerItem?: number;
   maxRetries?: number;
+  timeoutMs?: number;
   retryPrompt?: (basePrompt: string, count: number) => string;
 }
 
@@ -55,9 +56,11 @@ export class AiGenerationService {
           defaultModel: model,
           maxTokens,
           temperature,
+          maxRetries: 0,
+          timeoutMs: options.timeoutMs ?? 45000,
         });
 
-        this.logger.debug(`AI Response content (first 500 chars): ${response.content.substring(0, 500)}`);
+        this.logger.debug(JSON.stringify({event:"ai.provider_response",characters:response.content.length}));
 
         return {
           content: response.content,
@@ -67,10 +70,8 @@ export class AiGenerationService {
         // Only retry on network/provider errors, not parsing errors
         // Parsing errors should be handled by the caller
         if (attempt === maxRetries) {
-          this.logger.error(`Failed to generate valid response after ${maxRetries + 1} attempts`, error.stack);
-          throw new BadRequestException(
-            `Failed to generate content after ${maxRetries + 1} attempts. The AI response may be incomplete or invalid. Please try again or reduce the count.`,
-          );
+          this.logger.warn(JSON.stringify({event:"ai.generation_failed",attempts:maxRetries+1}));
+          throw error;
         }
         // For other errors, retry if not last attempt
         if (attempt < maxRetries) {

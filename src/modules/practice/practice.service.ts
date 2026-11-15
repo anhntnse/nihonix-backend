@@ -1,460 +1,90 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { PracticeSession } from './entity/practice-session.entity';
-import { PracticeExercise } from './entity/practice-exercise.entity';
-import { Topic } from '@topics/entity/topic.entity';
-import { VocabularyItem } from '@vocabulary-items/entity/vocabulary-item.entity';
-import { GrammarPattern } from '@grammar-patterns/entity/grammar-pattern.entity';
-import { GenerateFillBlankDto, GenerateMultipleChoiceDto, SubmitPracticeDto } from './dto';
-import { AiGenerationService } from '@ai/services/ai-generation.service';
-import { AiJsonParserService } from '@ai/services/ai-json-parser.service';
-import { RetryNeededException } from '@ai/exceptions/retry-needed.exception';
+import {Injectable,NotFoundException,BadRequestException,ConflictException} from '@nestjs/common';
+import {DataSource,EntityManager} from 'typeorm';
+import {randomUUID,createHash} from 'crypto';
+import {PracticeSession} from './entity/practice-session.entity';
+import {PracticeExercise} from './entity/practice-exercise.entity';
+import {PracticeSubmission,PracticeCompletionEvent} from './entity/practice-submission.entity';
+import {Topic} from '../topics/entity/topic.entity';
+import {VocabularyItem} from '../vocabulary-items/entity/vocabulary-item.entity';
+import {GrammarPattern} from '../grammar-patterns/entity/grammar-pattern.entity';
+import {User} from '../users/entity/user.entity';
+import {AiGenerationService} from '../ai/services/ai-generation.service';
+import {AiService} from '../ai/services/ai.service';
+import {AiRequestService,aiFailure} from '../ai/ai-request.service';
+import {canonicalJson} from '../flashcards/sync/flashcard-policy';
+import {practicePrompt,practiceOutput} from './practice-generation';
+import {publicExercises,gradeAnswers} from './practice-policy';
 
 @Injectable()
-export class PracticeService {
-  private readonly logger = new Logger(PracticeService.name);
-
-  constructor(
-    @InjectRepository(PracticeSession)
-    private practiceSessionRepository: Repository<PracticeSession>,
-    @InjectRepository(PracticeExercise)
-    private practiceExerciseRepository: Repository<PracticeExercise>,
-    @InjectRepository(Topic)
-    private topicRepository: Repository<Topic>,
-    @InjectRepository(VocabularyItem)
-    private vocabularyItemRepository: Repository<VocabularyItem>,
-    @InjectRepository(GrammarPattern)
-    private grammarPatternRepository: Repository<GrammarPattern>,
-    private aiGenerationService: AiGenerationService,
-    private aiJsonParserService: AiJsonParserService,
-  ) {}
-
-  async generateFillBlank(dto: GenerateFillBlankDto, userId: string): Promise<any> {
-    return this.generatePracticeByType(dto.topic_id, 'fill_blank', dto.exercise_count || 10, userId);
-  }
-
-  async generateMultipleChoice(dto: GenerateMultipleChoiceDto, userId: string): Promise<any> {
-    return this.generatePracticeByType(dto.topic_id, 'multiple_choice', dto.exercise_count || 10, userId);
-  }
-
-  private async generatePracticeByType(
-    topicId: string,
-    exerciseType: 'fill_blank' | 'multiple_choice',
-    exerciseCount: number,
-    userId: string,
-  ): Promise<any> {
-    try {
-      this.logger.log(`Generating ${exerciseType} practice for topic: ${topicId}, count: ${exerciseCount}`);
-
-      // 1. Get topic
-      const topic = await this.topicRepository.findOne({
-        where: { id: topicId },
-        relations: ['level'],
-      });
-
-      if (!topic) {
-        throw new NotFoundException(`Topic with id ${topicId} not found`);
-      }
-
-      // 2. Get vocabulary items
-      const vocabularyItems = await this.vocabularyItemRepository.find({
-        where: { topic_id: topicId },
-        order: { order: 'ASC' },
-      });
-
-      if (vocabularyItems.length === 0) {
-        throw new BadRequestException('No vocabulary items found for this topic');
-      }
-
-      // 3. Get grammar patterns (via topic slug)
-      const grammarPatterns = await this.grammarPatternRepository.find({
-        where: { topic_slug: topic.slug },
-      });
-
-      if (grammarPatterns.length === 0) {
-        throw new BadRequestException('No grammar patterns found for this topic');
-      }
-
-      // 4. Build AI prompt
-      const prompt = this.buildPracticePromptByType(
-        topic,
-        vocabularyItems,
-        grammarPatterns,
-        exerciseType,
-        exerciseCount,
-      );
-
-      // 5. Generate exercises with AI
-      const maxRetries = 3;
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          const response = await this.aiGenerationService.generateWithRetry({
-            prompt,
-            expectedCount: 1,
-            tokensPerItem: 500 * exerciseCount,
-            maxRetries: 0,
-          });
-
-          const result = this.aiJsonParserService.parseJson<any>(response.content, {
-            expectedCount: 1,
-            allowRepair: true,
-            arrayType: 'object',
-          });
-
-          if (!result.exercises || !Array.isArray(result.exercises)) {
-            throw new RetryNeededException('AI response missing exercises array');
-          }
-
-          const validExercises = this.validateExercises(result.exercises);
-          if (validExercises.length === 0) {
-            throw new RetryNeededException('All exercises are invalid');
-          }
-
-          // 6. Create practice session
-          const session = await this.createPracticeSession(
-            userId,
-            topicId,
-            topic.level_code,
-            validExercises.length,
-            exerciseType,
-          );
-
-          // 7. Save exercises
-          const savedExercises = await this.saveExercises(session.id, validExercises);
-
-          return {
-            session_id: session.id,
-            topic_id: topicId,
-            topic_title: topic.title,
-            level_code: topic.level_code,
-            exercise_type: exerciseType,
-            total_exercises: savedExercises.length,
-            vocabulary_count: vocabularyItems.length,
-            grammar_count: grammarPatterns.length,
-            exercises: savedExercises.map((ex, index) => ({
-              id: ex.id,
-              type: ex.type,
-              question: ex.question,
-              options: ex.options,
-              explanation: ex.explanation,
-              order: index + 1,
-            })),
-            estimated_time: Math.ceil(savedExercises.length * 1.5), // minutes
-            created_at: session.created_at,
-          };
-        } catch (error: any) {
-          if (error instanceof RetryNeededException && attempt < maxRetries) {
-            this.logger.warn(`Retrying practice generation (attempt ${attempt + 2}/${maxRetries + 1})...`);
-            continue;
-          }
-          if (attempt === maxRetries) {
-            this.logger.error(`Failed to generate practice after ${maxRetries + 1} attempts`, error.stack);
-            throw new BadRequestException(
-              `Failed to generate practice exercises after ${maxRetries + 1} attempts. Please try again.`,
-            );
-          }
-          throw error;
-        }
-      }
-
-      throw new BadRequestException('Failed to generate practice exercises');
-    } catch (error: any) {
-      this.logger.error(`Practice generation error: ${error.message}`, error.stack);
-      throw error;
-    }
-  }
-
-  async getPracticeSets(
-    userId: string,
-    topicId?: string,
-    exerciseType?: 'fill_blank' | 'multiple_choice',
-    status?: 'in_progress' | 'completed',
-  ): Promise<any> {
-    const where: any = { user_id: userId };
-    if (topicId) where.topic_id = topicId;
-    if (exerciseType) where.exercise_type = exerciseType;
-    if (status) where.status = status;
-
-    const sessions = await this.practiceSessionRepository.find({
-      where,
-      relations: ['topic'],
-      order: { created_at: 'DESC' },
-    });
-
-    return sessions.map((session) => ({
-      id: session.id,
-      topic_id: session.topic_id,
-      topic_title: session.topic.title,
-      level_code: session.level_code,
-      exercise_type: session.exercise_type,
-      total_exercises: session.total_exercises,
-      correct_count: session.correct_count,
-      accuracy: session.accuracy ? Math.round(Number(session.accuracy)) : null,
-      total_time: session.total_time,
-      status: session.status,
-      completed_at: session.completed_at,
-      created_at: session.created_at,
-    }));
-  }
-
-  async getPracticeSetById(sessionId: string, userId: string): Promise<any> {
-    const session = await this.practiceSessionRepository.findOne({
-      where: { id: sessionId, user_id: userId },
-      relations: ['topic', 'exercises'],
-    });
-
-    if (!session) {
-      throw new NotFoundException('Practice set not found');
-    }
-
-    // Sort exercises by order_index
-    const sortedExercises = session.exercises.sort((a, b) => a.order_index - b.order_index);
-
-    return {
-      id: session.id,
-      topic_id: session.topic_id,
-      topic_title: session.topic.title,
-      level_code: session.level_code,
-      exercise_type: session.exercise_type,
-      total_exercises: session.total_exercises,
-      correct_count: session.correct_count,
-      accuracy: session.accuracy ? Math.round(Number(session.accuracy)) : null,
-      total_time: session.total_time,
-      status: session.status,
-      completed_at: session.completed_at,
-      created_at: session.created_at,
-      exercises: sortedExercises.map((ex) => ({
-        id: ex.id,
-        type: ex.type,
-        question: ex.question,
-        options: ex.options,
-        correct_answer: ex.correct_answer,
-        explanation: ex.explanation,
-        vocabulary_tested: ex.vocabulary_tested,
-        grammar_tested: ex.grammar_tested,
-        user_answer: ex.user_answer,
-        is_correct: ex.is_correct,
-        time_spent: ex.time_spent,
-        order: ex.order_index,
-      })),
-    };
-  }
-
-  async submitPractice(dto: SubmitPracticeDto, userId: string): Promise<any> {
-    const session = await this.practiceSessionRepository.findOne({
-      where: { id: dto.session_id, user_id: userId },
-      relations: ['exercises', 'topic'],
-    });
-
-    if (!session) {
-      throw new NotFoundException('Practice session not found');
-    }
-
-    if (session.status === 'completed') {
-      throw new BadRequestException('Practice session already completed');
-    }
-
-    let correctCount = 0;
-    let totalTime = 0;
-    const results: any[] = [];
-
-    for (const answer of dto.answers) {
-      const exercise = session.exercises.find((ex) => ex.id === answer.exercise_id);
-      if (!exercise) continue;
-
-      const isCorrect = this.checkAnswer(exercise, answer.user_answer);
-      if (isCorrect) correctCount++;
-
-      exercise.user_answer = answer.user_answer;
-      exercise.is_correct = isCorrect;
-      exercise.time_spent = answer.time_spent || 0;
-      totalTime += exercise.time_spent;
-
-      await this.practiceExerciseRepository.save(exercise);
-
-      results.push({
-        exercise_id: exercise.id,
-        is_correct: isCorrect,
-        user_answer: answer.user_answer,
-        correct_answer: exercise.correct_answer,
-        explanation: exercise.explanation,
-      });
-    }
-
-    const accuracy = (correctCount / session.total_exercises) * 100;
-
-    session.correct_count = correctCount;
-    session.accuracy = accuracy;
-    session.total_time = totalTime;
-    session.status = 'completed';
-    session.completed_at = new Date();
-
-    await this.practiceSessionRepository.save(session);
-
-    return {
-      session_id: session.id,
-      topic_title: session.topic.title,
-      total_exercises: session.total_exercises,
-      correct_count: correctCount,
-      accuracy: Math.round(accuracy),
-      total_time: totalTime,
-      results,
-    };
-  }
-
-  private async createPracticeSession(
-    userId: string,
-    topicId: string,
-    levelCode: string,
-    totalExercises: number,
-    exerciseType: 'fill_blank' | 'multiple_choice',
-  ): Promise<PracticeSession> {
-    const session = this.practiceSessionRepository.create({
-      user_id: userId,
-      topic_id: topicId,
-      level_code: levelCode,
-      total_exercises: totalExercises,
-      exercise_type: exerciseType,
-      status: 'in_progress',
-    });
-
-    return this.practiceSessionRepository.save(session);
-  }
-
-  private async saveExercises(sessionId: string, exercises: any[]): Promise<PracticeExercise[]> {
-    const savedExercises: PracticeExercise[] = [];
-
-    for (let i = 0; i < exercises.length; i++) {
-      const ex = exercises[i];
-      const exercise = this.practiceExerciseRepository.create({
-        session_id: sessionId,
-        type: ex.type,
-        question: ex.question,
-        options: ex.options || null,
-        correct_answer: ex.correct_answer,
-        explanation: ex.explanation,
-        vocabulary_tested: ex.vocabulary_tested || null,
-        grammar_tested: ex.grammar_tested || null,
-        order_index: i + 1,
-      });
-
-      const saved = await this.practiceExerciseRepository.save(exercise);
-      savedExercises.push(saved);
-    }
-
-    return savedExercises;
-  }
-
-  private validateExercises(exercises: any[]): any[] {
-    const validExercises: any[] = [];
-
-    for (const ex of exercises) {
-      if (
-        !ex.type ||
-        !ex.question ||
-        !ex.question.text ||
-        !ex.correct_answer ||
-        !ex.explanation ||
-        !ex.explanation.vi ||
-        !ex.explanation.en
-      ) {
-        this.logger.warn('Skipping invalid exercise', JSON.stringify(ex, null, 2));
-        continue;
-      }
-
-      validExercises.push(ex);
-    }
-
-    return validExercises;
-  }
-
-  private checkAnswer(exercise: PracticeExercise, userAnswer: any): boolean {
-    const correctAnswer = exercise.correct_answer;
-
-    if (exercise.type === 'multiple_choice' || exercise.type === 'fill_blank') {
-      return userAnswer === correctAnswer;
-    }
-
-    if (exercise.type === 'translation') {
-      if (Array.isArray(correctAnswer)) {
-        return correctAnswer.some((ans: string) =>
-          ans.toLowerCase().trim() === String(userAnswer).toLowerCase().trim(),
-        );
-      }
-      return String(correctAnswer).toLowerCase().trim() === String(userAnswer).toLowerCase().trim();
-    }
-
-    if (exercise.type === 'sentence_order') {
-      return JSON.stringify(userAnswer) === JSON.stringify(correctAnswer);
-    }
-
-    return false;
-  }
-
-  private buildPracticePromptByType(
-    topic: Topic,
-    vocabularyItems: VocabularyItem[],
-    grammarPatterns: GrammarPattern[],
-    exerciseType: 'fill_blank' | 'multiple_choice',
-    exerciseCount: number,
-  ): string {
-    const typeDescription = exerciseType === 'fill_blank' 
-      ? 'Fill in the blank (4 options)' 
-      : 'Choose correct answer (4 options)';
-
-    return `You are a Japanese language learning assistant. Generate practice exercises combining vocabulary and grammar.
-
-TOPIC: "${topic.title.en}" (${topic.level_code})
-
-VOCABULARY AVAILABLE (${vocabularyItems.length} items):
-${vocabularyItems.slice(0, 20).map(v => `- ${v.romaji} (${v.kanji || v.kana}): ${v.meaning.en}`).join('\n')}
-
-GRAMMAR PATTERNS AVAILABLE (${grammarPatterns.length} patterns):
-${grammarPatterns.slice(0, 10).map(g => `- ${g.pattern_jp} (${g.pattern_romaji || ''}): ${g.explanation.en}`).join('\n')}
-
-REQUIREMENTS:
-- Generate exactly ${exerciseCount} exercises
-- Exercise type: ${exerciseType} (${typeDescription})
-- Use ONLY vocabulary and grammar from the lists above
-- Ensure exercises are contextually relevant
-- Provide clear explanations in Vietnamese and English
-- All exercises MUST be type: "${exerciseType}"
-
-OUTPUT FORMAT (JSON):
-{
-  "exercises": [
-    {
-      "type": "${exerciseType}",
-      "question": {
-        "text": "おはよう____。",
-        "hint": "Morning greeting",
-        "context": "Greeting someone in the morning"
-      },
-      "options": [
-        { "id": 1, "text": "ございます" },
-        { "id": 2, "text": "です" },
-        { "id": 3, "text": "ました" },
-        { "id": 4, "text": "ません" }
-      ],
-      "correct_answer": 1,
-      "explanation": {
-        "vi": "おはようございます là lời chào buổi sáng lịch sự",
-        "en": "おはようございます is a polite morning greeting"
-      },
-      "vocabulary_tested": ["ohayou"],
-      "grammar_tested": ["gozaimasu"]
-    }
-  ]
+export class PracticeService{
+ constructor(private readonly db:DataSource,private readonly generator:AiGenerationService,
+  private readonly requests:AiRequestService,private readonly ai:AiService){}
+ generateFillBlank(dto:any,user:string){return this.generate(dto,user,'fill_blank');}
+ generateMultipleChoice(dto:any,user:string){return this.generate(dto,user,'multiple_choice');}
+ private async generate(dto:any,user:string,kind:'fill_blank'|'multiple_choice'){
+  const topic=await this.db.manager.findOne(Topic,{where:{id:dto.topic_id}});
+  if(!topic)throw new NotFoundException('Topic not found');
+  const words=await this.db.manager.find(VocabularyItem,{where:{topic_id:topic.id},order:{order:'ASC',slug:'ASC'},take:30});
+  const grammar=await this.db.manager.find(GrammarPattern,{where:{topic_slug:topic.slug},order:{order:'ASC',slug:'ASC'},take:15});
+  if(!words.length&&!grammar.length)throw new BadRequestException('This topic has no learning material yet.');
+  if(!(await this.ai.healthCheck()).configured)throw aiFailure('AI_UNAVAILABLE',503,'AI is not configured.');
+  const count=dto.exercise_count??10,id=dto.request_id??randomUUID(),payload={topic_id:topic.id,exercise_count:count};
+  return this.requests.execute(user,id,kind,payload,async()=>{
+   const response=await this.generator.generateWithRetry({prompt:practicePrompt(topic,words,grammar,kind,count),expectedCount:count,tokensPerItem:800,maxRetries:0,timeoutMs:45000});
+   return practiceOutput(response.content,kind,count);
+  },async(m,generated)=>{
+   if(!await m.findOne(Topic,{where:{id:topic.id}}))throw new NotFoundException('Topic no longer exists');
+   const session=await m.save(m.create(PracticeSession,{user_id:user,topic_id:topic.id,level_code:topic.level_code,
+    exercise_type:kind,total_exercises:generated.length,status:'in_progress'}));
+   const exercises=await m.save(PracticeExercise,generated.map((ex:any,index:number)=>m.create(PracticeExercise,{...ex,session_id:session.id,order_index:index+1})));
+   return this.project(session,topic,exercises);
+  });
+ }
+ private project(session:any,topic:any,exercises?:any[],result?:any){
+  return {id:session.id,topic_id:session.topic_id,topic_title:topic?.title??{},level_code:session.level_code,
+   exercise_type:session.exercise_type,total_exercises:session.total_exercises,status:session.status,
+   correct_count:session.correct_count??null,accuracy:session.accuracy==null?null:Math.round(Number(session.accuracy)),
+   total_time:session.total_time??null,completed_at:session.completed_at??null,created_at:session.created_at,
+   exercises:exercises?publicExercises(exercises,session.status==='completed'):[],result:result??null};
+ }
+ async getPracticeSets(user:string,topicId?:string,exerciseType?:string,status?:string,page=1,pageSize=20){
+  const where:any={user_id:user};if(topicId)where.topic_id=topicId;if(exerciseType)where.exercise_type=exerciseType;if(status)where.status=status;
+  const [items,total]=await this.db.manager.findAndCount(PracticeSession,{where,relations:['topic'],order:{created_at:'DESC',id:'DESC'},skip:(page-1)*pageSize,take:pageSize});
+  return {items:items.map(s=>this.project(s,s.topic)),total,page,page_size:pageSize,has_more:page*pageSize<total};
+ }
+ async getPracticeSetById(id:string,user:string){
+  const session=await this.db.manager.findOne(PracticeSession,{where:{id,user_id:user},relations:['topic','exercises']});
+  if(!session)throw new NotFoundException('Practice set not found');
+  const submission=session.status==='completed'?await this.db.manager.findOne(PracticeSubmission,{where:{session_id:id,user_id:user}}):null;
+  return this.project(session,session.topic,session.exercises.sort((a,b)=>a.order_index-b.order_index),submission?.result);
+ }
+ async submitPractice(dto:any,user:string){
+  const requestId=(dto.request_id??randomUUID()).toLowerCase();
+  const payload={session_id:dto.session_id,answers:[...dto.answers].map(a=>({exercise_id:a.exercise_id,user_answer:a.user_answer,time_spent:a.time_spent??0})).sort((a,b)=>a.exercise_id.localeCompare(b.exercise_id))};
+  const hash=createHash('sha256').update(canonicalJson(payload)).digest('hex');
+  return this.db.transaction(async m=>{
+   if(!await m.findOne(User,{where:{id:user},lock:{mode:'pessimistic_write'}}))throw new NotFoundException('Account not found');
+   const replay=await m.findOne(PracticeSubmission,{where:{user_id:user,request_id:requestId}});
+   if(replay){if(replay.payload_hash!==hash)throw new ConflictException('Submission ID was already used with different answers');return replay.result;}
+   const session=await m.findOne(PracticeSession,{where:{id:dto.session_id,user_id:user},relations:['exercises','topic']});
+   if(!session)throw new NotFoundException('Practice set not found');
+   const previous=await m.findOne(PracticeSubmission,{where:{session_id:session.id,user_id:user}});
+   if(previous){if(previous.payload_hash!==hash)throw new ConflictException('Practice was already submitted with different answers');return previous.result;}
+   if(session.status==='completed')throw new ConflictException('Practice is already completed. Reload the result.');
+   const graded=gradeAnswers(session.exercises,payload.answers),completed=new Date(),completionId=randomUUID();
+   for(const result of graded.results){
+    const ex=session.exercises.find(e=>e.id===result.exercise_id)!;
+    ex.user_answer=result.user_answer;ex.is_correct=result.is_correct;ex.time_spent=result.time_spent;
+   }
+   await m.save(PracticeExercise,session.exercises);
+   session.status='completed';session.correct_count=graded.correct_count;session.accuracy=graded.accuracy;
+   session.total_time=graded.total_time;session.completed_at=completed;await m.save(session);
+   const result={request_id:requestId,session_id:session.id,topic_title:session.topic.title,completed_at:completed.toISOString(),
+    completion_id:completionId,...graded};
+   await m.save(m.create(PracticeSubmission,{session_id:session.id,user_id:user,request_id:requestId,payload_hash:hash,result}));
+   await m.save(m.create(PracticeCompletionEvent,{id:completionId,user_id:user,session_id:session.id,kind:'practice_completed',
+    completed_at:completed,duration_seconds:graded.total_time,schema_version:1,payload:{topic_id:session.topic_id,exercise_type:session.exercise_type,total:graded.total_exercises,correct:graded.correct_count}}));
+   return result;
+  });
+ }
 }
-
-IMPORTANT:
-- ONLY use vocabulary and grammar from the provided lists
-- Ensure all exercises are appropriate for ${topic.level_code} level
-- ALL exercises must have type: "${exerciseType}"
-- Return ONLY valid JSON, no other text
-
-RETURN ONLY THE JSON OBJECT - NO OTHER TEXT!`;
-  }
-}
-

@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { OpenRouterProvider } from '../providers/openrouter.provider';
+import { GeminiProvider } from '../providers/gemini.provider';
 
 @Injectable()
 export class AiService {
-  constructor(private openRouterProvider: OpenRouterProvider) {}
+  constructor(private geminiProvider: GeminiProvider) {}
 
   /**
    * Health check cho AI service
    */
   async healthCheck(): Promise<{ status: string; configured: boolean }> {
-    return this.openRouterProvider.healthCheck();
+    return this.geminiProvider.healthCheck();
   }
 }

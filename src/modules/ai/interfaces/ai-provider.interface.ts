@@ -4,6 +4,8 @@ export interface AiProviderConfig {
   model?: string;
   defaultModel?: string;
   maxTokens?: number;
+  maxRetries?: number;
+  timeoutMs?: number;
   temperature?: number;
   siteUrl?: string;
   siteName?: string;

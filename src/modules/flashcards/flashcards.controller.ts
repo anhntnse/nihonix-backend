@@ -14,6 +14,7 @@ import {
   ClassSerializerInterceptor,
   Request,
   ParseUUIDPipe,
+  ConflictException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { FlashcardsService } from './services/flashcards.service';
@@ -56,22 +57,13 @@ export class FlashcardsController {
   @Post('generate')
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(ClassSerializerInterceptor)
-  @ApiOperation({ summary: 'Generate flashcards using AI' })
-  @ApiOkResponse({ 
-    description: 'Flashcards generated successfully',
-    type: BulkCreateResponseDto,
+  @ApiOperation({ summary: 'Generate an AI flashcard preview without saving a set' })
+  @ApiOkResponse({
+    description: 'Request snapshot: request_id, kind, status, nullable result/error. A successful result contains draft_id, folder_id, set_name and cards; save explicitly through the flashcard writer.',
   })
   async generateFlashcards(@Body() generateDto: GenerateFlashcardsDto, @Request() req) {
-    const result = await this.flashcardsService.generateFlashcards(generateDto, req.user.id);
-    
-    // Remove set_id field from each card in response
-    return {
-      set_id: result.set_id,
-      set_name: result.set_name,
-      created: result.created,
-      cards: result.cards.map(({ set_id, ...card }) => card),
-      usage: result.usage,
-    };
+    if(req.headers['x-nihonix-account']&&req.headers['x-nihonix-account']!==req.user.id)throw new ConflictException('Account changed before generation');
+    return this.flashcardsService.generateFlashcards(generateDto, req.user.id);
   }
 
   @Put('bulk')

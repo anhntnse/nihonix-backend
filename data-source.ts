@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import {AiGenerationRequest} from './src/modules/ai/ai-request.entity';
+import {PracticeSubmission,PracticeCompletionEvent} from './src/modules/practice/entity/practice-submission.entity';
 import {FlashcardSyncHead,FlashcardSyncReceipt} from './src/modules/flashcards/sync/flashcard-sync.entity';
 import { LearningProgress, ProgressReceipt } from './src/modules/progress/progress.entity';
 import { DataSource } from 'typeorm';
@@ -72,7 +74,7 @@ export const AppDataSource = new DataSource({
   password: process.env.DATABASE_PASSWORD || '',
   database: process.env.DATABASE_NAME || 'nihonix_db',
   entities: [
-    LearningProgress, ProgressReceipt, FlashcardSyncHead, FlashcardSyncReceipt,
+    LearningProgress, ProgressReceipt, FlashcardSyncHead, FlashcardSyncReceipt, AiGenerationRequest, PracticeSubmission, PracticeCompletionEvent,
     User,
     UserAuth,
     Session,
