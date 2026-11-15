@@ -60,7 +60,6 @@ export class GrammarPatternsService {
   async generateGrammar(dto: GenerateGrammarDto): Promise<any> {
     try {
       const count = dto.count || 3;
-      const levelCode = dto.level_code || 'N5';
 
       const grammarSubTopic = await this.grammarSubTopicRepository.findOne({
         where: { slug: dto.grammar_sub_topic_slug },
@@ -71,6 +70,8 @@ export class GrammarPatternsService {
         throw new NotFoundException(`Grammar sub-topic with slug ${dto.grammar_sub_topic_slug} not found`);
       }
 
+      const levelCode = grammarSubTopic.level_code;
+      if (dto.level_code && dto.level_code !== levelCode) throw new BadRequestException('Grammar level must match its sub-topic');
       const { patterns, usage: aiUsage } = await this.generateWithRetry(dto, count, levelCode);
       const { validPatterns, invalidPatterns } = this.validatePatterns(patterns);
       const savedPatterns = await this.savePatterns(validPatterns, dto, grammarSubTopic.topic.slug, levelCode);

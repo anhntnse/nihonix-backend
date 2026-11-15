@@ -114,7 +114,6 @@ export class VocabularyItemsService {
       this.logger.log(`Generating vocabulary set for topic: ${dto.topic_id}`);
 
       const count = dto.count || 10;
-      const levelCode = dto.level_code || 'N5';
 
       // Validate topic exists
       const topic = await this.topicRepository.findOne({
@@ -125,6 +124,8 @@ export class VocabularyItemsService {
         throw new NotFoundException(`Topic with id ${dto.topic_id} not found`);
       }
 
+      const levelCode = topic.level_code;
+      if (dto.level_code && dto.level_code !== levelCode) throw new BadRequestException('Vocabulary level must match its topic');
       const basePrompt = dto.custom_prompt || this.buildPrompt(topic.slug, count, levelCode);
 
       const maxRetries = 3;

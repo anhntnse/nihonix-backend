@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, IsInt, Min } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsInt, Min, IsIn } from 'class-validator';
 
 export class GenerateGrammarDto {
   @ApiProperty({ description: 'Grammar sub-topic slug để generate grammar patterns', example: 'basic-patterns-greetings' })
@@ -9,7 +9,7 @@ export class GenerateGrammarDto {
 
   @ApiProperty({ description: 'Level code (N5, N4, N3)', example: 'N5', required: false })
   @IsOptional()
-  @IsString()
+  @IsIn(['N5','N4','N3','N2','N1'])
   level_code?: string;
 
   @ApiProperty({ description: 'Số lượng grammar patterns cần generate', example: 5, required: false, default: 3 })
