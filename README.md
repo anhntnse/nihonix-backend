@@ -80,6 +80,10 @@ npm run lint          # Lint code
 npm run test          # Run tests
 ```
 
+## Sprint 06 — Private flashcards
+
+See [SPRINT_06.md](SPRINT_06.md) for owner-safe CRUD, atomic bulk writes, UUID receipt/delta synchronization and legacy-data preservation. Run `npm run test:sprint06` against local PostgreSQL; it creates/removes an isolated schema and stubs external providers. Shared deployment and AI/quota integration remain separate.
+
 ## 📝 Database
 
 Database tự động tạo tables khi start (TypeORM synchronize).
