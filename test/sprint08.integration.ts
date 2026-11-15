@@ -1,0 +1,158 @@
+/** Temporary local PostgreSQL schema; real JWT HTTP; no real email/push delivery. */
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'crypto';
+import {DataSource} from 'typeorm';
+import {Test} from '@nestjs/testing';
+import {TypeOrmModule} from '@nestjs/typeorm';
+import {ConfigModule,ConfigService} from '@nestjs/config';
+import {ValidationPipe} from '@nestjs/common';
+import {Reflector} from '@nestjs/core';
+import request from 'supertest';
+import {PracticeModule} from '../src/modules/practice/practice.module';
+import {AiGenerationService} from '../src/modules/ai/services/ai-generation.service';
+import {ActivityDevices1794959200000} from '../src/database/migrations/1794959200000-ActivityDevices';
+import {ReminderService} from '../src/modules/notifications/reminder.service';
+import {FcmProvider} from '../src/modules/notifications/fcm.provider';
+import {NotificationsModule} from '../src/modules/notifications/notifications.module';
+import {AppDataSource} from '../data-source';
+import {AuthModule} from '../src/modules/auth/auth.module';
+import {EmailService} from '../src/modules/auth/services/email.service';
+import {LearningStreaksModule} from '../src/modules/learning-streaks/learning-streaks.module';
+import {ResponseInterceptor} from '../src/common/interceptors/response.interceptor';
+import {GlobalExceptionFilter} from '../src/common/filters/global-exception.filter';
+let stage='preflight';
+async function run(){
+ assert.ok(['localhost','127.0.0.1','::1'].includes(String((AppDataSource.options as any).host).toLowerCase()));
+ const schema='sprint08_test_'+randomUUID().replace(/-/g,'');
+ const options:any={...AppDataSource.options,schema,synchronize:false,migrationsRun:false,uuidExtension:'pgcrypto',installExtensions:false,logging:false,
+  extra:{...(AppDataSource.options as any).extra,options:'-c search_path='+schema}};
+ const db=new DataSource(options);let created=false,app:any;
+ try{
+  await db.initialize();await db.query('CREATE SCHEMA "'+schema+'"');created=true;await db.synchronize();
+  const codes=new Map<string,string>();const deliveries:any[]=[];let deliveryResult='sent';
+  const module=await Test.createTestingModule({imports:[
+   ConfigModule.forRoot({isGlobal:true,ignoreEnvFile:true,load:[()=>({jwt:{secret:'sprint08-access',refreshSecret:'sprint08-refresh',expiresIn:'15m',refreshExpiresIn:'7d'},bcrypt:{rounds:4},ai:{apiKey:'fixture-key-never-sent'}})]}),
+   TypeOrmModule.forRoot(options),AuthModule,LearningStreaksModule,NotificationsModule,PracticeModule
+  ]}).overrideProvider(AiGenerationService).useValue({generateWithRetry:async()=>({content:JSON.stringify({exercises:[{type:'fill_blank',question:{text:'これは____です。'},correct_answer:'猫',explanation:{en:'Cat',vi:'Mèo'}}]})})}).overrideProvider(FcmProvider).useValue({configured:()=>true,send:async(token:string,data:any)=>{deliveries.push({token,data});return deliveryResult;}}).overrideProvider(EmailService).useValue({sendEmailVerificationCode:async(email:string,code:string)=>codes.set(email,code)}).compile();
+  app=module.createNestApplication();app.setGlobalPrefix('api');
+  app.useGlobalPipes(new ValidationPipe({whitelist:true,forbidNonWhitelisted:true,transform:true}));
+  app.useGlobalInterceptors(new ResponseInterceptor(app.get(Reflector)));app.useGlobalFilters(new GlobalExceptionFilter());await app.init();
+  const api=request(app.getHttpServer());
+  const login=async(name:string)=>{
+   const email=name+'@example.test',password='password123';
+   const registration=await api.post('/api/auth/register').send({username:name,email,password}).expect(201);
+   await api.post('/api/auth/verify-email').send({email,code:codes.get(email)}).expect(200);
+   const result=await api.post('/api/auth/login').send({username:name,password}).expect(200);
+   return {id:registration.body.data.user.id,token:result.body.data.accessToken||result.body.data.access_token,refresh:result.body.data.refreshToken};
+  };
+  const a=await login('sprint08a'),b=await login('sprint08b');
+  const event={id:randomUUID(),activity_type:'vocabulary',duration_seconds:60,occurred_at:new Date(Date.now()-120000).toISOString(),timezone:'Asia/Ho_Chi_Minh'};
+  const batch=(events:any[],actor=a)=>api.post('/api/learning-streaks/activities/batch').auth(actor.token,{type:'bearer'}).set('X-Nihonix-Account',actor.id).send({events});
+  const summary=async(actor=a)=>(await api.get('/api/learning-streaks').auth(actor.token,{type:'bearer'}).expect(200)).body.data;
+  stage='idempotent-activity-contract';
+  await api.post('/api/learning-streaks/activities/batch').send({events:[event]}).expect(401);
+  await batch([event]).expect(200);
+  const first=await summary();assert.equal(first.current_streak,1);assert.equal(first.today_seconds,60);assert.equal(first.goal_completed,false);
+  await Promise.all([batch([event]).expect(200),batch([event]).expect(200)]);
+  assert.equal((await summary()).today_seconds,60);
+  await batch([{...event,duration_seconds:61}]).expect(409);
+  assert.equal((await summary(b)).today_seconds,0);
+  stage='account-pin-and-atomic-validation';
+  await api.post('/api/learning-streaks/activities/batch').auth(a.token,{type:'bearer'}).set('X-Nihonix-Account',b.id).send({events:[{...event,id:randomUUID()}]}).expect(409);
+  await batch([{...event,id:randomUUID()},{...event,id:randomUUID(),duration_seconds:301}]).expect(400);
+  assert.equal((await summary()).today_seconds,60);
+  stage='late-offline-day-and-timezone';
+  const yesterday=new Date(Date.now()-86400000-120000).toISOString();
+  await batch([{...event,id:randomUUID(),occurred_at:yesterday}]).expect(200);
+  assert.equal((await summary()).current_streak,2);
+  const before=await db.query('SELECT slices FROM learning_activity_events WHERE user_id=$1 ORDER BY occurred_at',[a.id]);
+  await db.query("UPDATE users SET learning_settings=$2 WHERE id=$1",[a.id,{timezone:'America/New_York',daily_goal_minutes:1,push_enabled:false}]);
+  assert.deepEqual(await db.query('SELECT slices FROM learning_activity_events WHERE user_id=$1 ORDER BY occurred_at',[a.id]),before);
+  const now=new Date();const calendar=(await api.get('/api/learning-streaks/calendar').query({year:now.getUTCFullYear(),month:now.getUTCMonth()+1}).auth(a.token,{type:'bearer'}).expect(200)).body.data;
+  assert.ok(calendar.learning_days.length>=1);assert.equal(calendar.timezone,'America/New_York');
+  stage='practice-completion-count-without-duplicate-time';
+  const topic=randomUUID(),practice=randomUUID();
+  await db.query("INSERT INTO levels(code,name) VALUES('N5',$1)",[{en:'N5',vi:'N5',jp:'N5'}]);
+  await db.query("INSERT INTO topics(id,slug,level_code,title) VALUES($1,'sprint08-topic','N5',$2)",[topic,{en:'Topic',vi:'Topic',jp:'Topic'}]);
+  await db.query("INSERT INTO practice_sessions(id,user_id,topic_id,level_code,total_exercises,status,exercise_type,completed_at) VALUES($1,$2,$3,'N5',1,'completed','fill_blank',now())",[practice,b.id,topic]);
+  await db.query("INSERT INTO practice_completion_events(id,user_id,session_id,kind,completed_at,duration_seconds,schema_version,payload) VALUES($1,$2,$3,'practice_completed',now(),60,1,'{}')",[randomUUID(),b.id,practice]);
+  assert.equal((await summary(b)).today_seconds,0);
+  const bCalendar=(await api.get('/api/learning-streaks/calendar').auth(b.token,{type:'bearer'}).expect(200)).body.data;
+  assert.equal(bCalendar.learning_days.reduce((n:number,d:any)=>n+d.practice_completions,0),1);
+  stage='captured-practice-history';
+  await db.query("UPDATE practice_completion_events SET completed_at='2026-11-15T17:30:00Z',payload=$2 WHERE user_id=$1",[b.id,{timezone:'Asia/Ho_Chi_Minh',activity_date:'2026-11-16'}]);
+  await db.query("UPDATE users SET learning_settings=$2 WHERE id=$1",[b.id,{timezone:'UTC',daily_goal_minutes:1}]);
+  const capturedCalendar=(await api.get('/api/learning-streaks/calendar').query({year:2026,month:11}).auth(b.token,{type:'bearer'}).expect(200)).body.data;
+  assert.equal(capturedCalendar.learning_days.find((d:any)=>d.date==='2026-11-16')?.practice_completions,1);
+  await db.query("INSERT INTO vocabulary_items(slug,topic_id,level_code,romaji,kana,meaning,word_type) VALUES('s8-neko',$1,'N5','neko','ねこ',$2,'noun')",[topic,{en:'cat',vi:'mèo',jp:'猫'}]);
+  await db.query("UPDATE users SET learning_settings=$2 WHERE id=$1",[b.id,{timezone:'Asia/Ho_Chi_Minh',daily_goal_minutes:1}]);
+  const generated=(await api.post('/api/practice/fill-blank').auth(b.token,{type:'bearer'}).send({request_id:randomUUID(),topic_id:topic,exercise_count:1}).expect(201)).body.data.result;
+  await api.post('/api/practice/submit').auth(b.token,{type:'bearer'}).send({request_id:randomUUID(),session_id:generated.id,answers:[{exercise_id:generated.exercises[0].id,user_answer:'猫'}]}).expect(200);
+  const capture=(await db.query('SELECT payload FROM practice_completion_events WHERE session_id=$1',[generated.id]))[0].payload;
+  assert.equal(capture.timezone,'Asia/Ho_Chi_Minh');assert.match(capture.activity_date,/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/);
+  stage='device-registration';
+  const installation=randomUUID();
+  const register=(actor:any,token='fixture-fcm-token-1234567890')=>api.put('/api/devices/'+installation).auth(actor.token,{type:'bearer'}).set('X-Nihonix-Account',actor.id).send({token,enabled:true});
+  const registered=(await register(a).expect(200)).body.data;
+  assert.ok(registered.binding_id);
+  assert.equal((await register(a).expect(200)).body.data.binding_id,registered.binding_id);
+  const switched=(await register(b).expect(200)).body.data;assert.notEqual(switched.binding_id,registered.binding_id);
+  await api.delete('/api/devices/'+installation).auth(a.token,{type:'bearer'}).expect(200);
+  assert.equal((await db.query('SELECT user_id FROM notification_devices WHERE installation_id=$1',[installation]))[0].user_id,b.id);
+  await register(b,'rotated-fcm-token-1234567890').expect(200);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM notification_devices WHERE token=$1',['fixture-fcm-token-1234567890']))[0].n,0);
+  stage='same-owner-session-device-removal';
+  const newLogin=(await api.post('/api/auth/login').send({username:'sprint08b',password:'password123'}).expect(200)).body.data;
+  const newToken=newLogin.accessToken;
+  const sameOwner=(await api.put('/api/devices/'+installation).auth(newToken,{type:'bearer'}).send({token:'rotated-fcm-token-1234567890',enabled:true}).expect(200)).body.data;
+  await api.delete('/api/devices/'+installation).auth(b.token,{type:'bearer'}).expect(200);
+  assert.equal((await db.query('SELECT binding_id FROM notification_devices WHERE installation_id=$1',[installation]))[0]?.binding_id,sameOwner.binding_id);
+  stage='logout-after-refresh-rotation';
+  const d=b;assert.ok(d.refresh);
+  const refreshed=(await api.post('/api/auth/refresh').send({refreshToken:d.refresh}).expect(200)).body.data;
+  await api.post('/api/auth/logout').auth(refreshed.accessToken,{type:'bearer'}).send({refreshToken:d.refresh}).expect(200);
+  await api.get('/api/learning-streaks').auth(refreshed.accessToken,{type:'bearer'}).expect(401);
+  await api.get('/api/learning-streaks').auth(newToken,{type:'bearer'}).expect(200);
+  stage='reminder-dedup-and-session';
+  const reminderNow=new Date(),parts=new Intl.DateTimeFormat('en-GB',{timeZone:'UTC',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(reminderNow);
+  await db.query("UPDATE users SET learning_settings=$2 WHERE id=$1",[b.id,{timezone:'UTC',daily_goal_minutes:1,push_enabled:true,reminder_enabled:true,reminder_time:parts}]);
+  const reminders=app.get(ReminderService);
+  const competingScheduler=new ReminderService(db,app.get(ConfigService),app.get(FcmProvider));
+  await Promise.all([reminders.run(reminderNow),competingScheduler.run(reminderNow)]);
+  assert.equal(deliveries.length,1);
+  assert.equal(deliveries[0].data.user_id,b.id);assert.equal(deliveries[0].data.destination,'activity');
+  await reminders.run(reminderNow);assert.equal(deliveries.length,1);
+  // Another account with a goal already completed receives no reminder.
+  await db.query("UPDATE users SET learning_settings=$2 WHERE id=$1",[a.id,{timezone:'UTC',daily_goal_minutes:1,push_enabled:true,reminder_enabled:true,reminder_time:parts}]);
+  await api.put('/api/devices/'+randomUUID()).auth(a.token,{type:'bearer'}).send({token:'goal-complete-fcm-token-123456789',enabled:true}).expect(200);
+  await reminders.run(reminderNow);assert.equal(deliveries.length,1);
+  // Delete the actual session as logout does; its device registration cascades.
+  const session=(await db.query('SELECT session_id FROM notification_devices WHERE installation_id=$1',[installation]))[0].session_id;
+  await db.query('DELETE FROM sessions WHERE id=$1',[session]);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM notification_devices WHERE installation_id=$1',[installation]))[0].n,0);
+  stage='invalid-token-and-optout';
+  const c=await login('sprint08c'),cInstallation=randomUUID();
+  await api.put('/api/devices/'+cInstallation).auth(c.token,{type:'bearer'}).send({token:'invalid-fcm-token-1234567890',enabled:true}).expect(200);
+  await db.query("UPDATE users SET learning_settings=$2 WHERE id=$1",[c.id,{timezone:'UTC',daily_goal_minutes:1,push_enabled:false,reminder_enabled:true,reminder_time:parts}]);
+  await reminders.run(reminderNow);assert.equal(deliveries.length,1);
+  await db.query("UPDATE users SET learning_settings=$2 WHERE id=$1",[c.id,{timezone:'UTC',daily_goal_minutes:1,push_enabled:true,reminder_enabled:true,reminder_time:parts}]);
+  deliveryResult='invalid';await reminders.run(reminderNow);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM notification_devices WHERE installation_id=$1',[cInstallation]))[0].n,0);
+  assert.equal(deliveries.length,2);
+  stage='account-cascade';
+  await db.query('DELETE FROM users WHERE id=$1',[a.id]);assert.equal((await db.query('SELECT count(*)::int AS n FROM learning_activity_events WHERE user_id=$1',[a.id]))[0].n,0);
+  stage='legacy-preserving-migration';
+  await db.query("INSERT INTO user_learning_activities(user_id,activity_date,activity_count,activity_type) VALUES($1,'2026-11-01',5,'vocabulary')",[b.id]);
+  const runner=db.createQueryRunner(),migration=new ActivityDevices1794959200000();
+  await migration.down(runner);await migration.up(runner);await migration.up(runner);await runner.release();
+  assert.equal((await db.query('SELECT activity_count FROM user_learning_activities WHERE user_id=$1',[b.id]))[0].activity_count,5);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM practice_completion_events WHERE user_id=$1',[b.id]))[0].n,2);
+  console.log('PASS Sprint08 activity JWT/isolation/replay/conflict/atomic validation/late events/timezone/calendar/cascade; no real delivery.');
+ }finally{
+  if(app)await app.close();
+  if(created&&db.isInitialized){assert.match(schema,/^sprint08_test_[a-f0-9]{32}$/);await db.query('DROP SCHEMA "'+schema+'" CASCADE');}
+  if(db.isInitialized)await db.destroy();
+ }
+}
+run().catch((e:any)=>{console.error(JSON.stringify({result:'FAIL',stage,type:e.name,message:e.message}));process.exitCode=1;});
