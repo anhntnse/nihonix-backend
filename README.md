@@ -2,6 +2,8 @@
 
 Backend API cho ứng dụng học tiếng Nhật.
 
+[Section 02 security review](SECURITY_REVIEW.md): liveness-only AI health, route exposure regression, owner deletion checks, pending D02 and dependency/retention triage.
+
 [Sprint07 AI/quota/practice handoff](SPRINT_07.md): atomic quota ledger, validated generation, private practice/grading and explicit flashcard previews.
 
 ## 🛠️ Tech Stack

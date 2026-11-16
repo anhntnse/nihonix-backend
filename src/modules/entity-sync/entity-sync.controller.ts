@@ -1,3 +1,5 @@
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Controller, Post, Body, Get, Param, Query, HttpCode, HttpStatus, Headers, Res, NotFoundException, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiParam, ApiQuery, ApiHeader } from '@nestjs/swagger';
 import { Request, Response } from 'express';
@@ -8,6 +10,7 @@ import { EntityKind } from './entity/entity-sync.entity';
 
 @ApiTags('Entity Sync')
 @Controller('entity-sync')
+@UseGuards(JwtAuthGuard)
 export class EntitySyncController {
   constructor(private readonly entitySyncService: EntitySyncService) {}
   

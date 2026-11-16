@@ -1,3 +1,5 @@
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { GrammarSubTopicsService } from './services/grammar-sub-topics.service';
@@ -5,6 +7,7 @@ import { GrammarSubTopic } from './entity/grammar-sub-topic.entity';
 
 @ApiTags('Grammar Sub-Topics')
 @Controller('grammar-sub-topics')
+@UseGuards(JwtAuthGuard)
 export class GrammarSubTopicsController {
   constructor(private readonly grammarSubTopicsService: GrammarSubTopicsService) {}
 

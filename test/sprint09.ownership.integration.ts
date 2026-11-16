@@ -10,7 +10,7 @@ import {DataSource} from 'typeorm';
 import {Test} from '@nestjs/testing';
 import {TypeOrmModule} from '@nestjs/typeorm';
 import {ConfigModule} from '@nestjs/config';
-import {ValidationPipe} from '@nestjs/common';
+import {ValidationPipe, BadRequestException} from '@nestjs/common';
 import {Reflector} from '@nestjs/core';
 import request from 'supertest';
 import {configureFlashcardBodies} from '../src/modules/flashcards/sync/flashcard-body-parser';
@@ -28,9 +28,13 @@ import {TopicsModule} from '../src/modules/topics/topics.module';
 import {VocabularyItemsModule} from '../src/modules/vocabulary-items/vocabulary-items.module';
 import {VocabularySetsModule} from '../src/modules/vocabulary-sets/vocabulary-sets.module';
 import {GrammarPatternsModule} from '../src/modules/grammar-patterns/grammar-patterns.module';
+import {LearningContentModule} from '../src/modules/learning-content/learning-content.module';
+import {GrammarSubTopicsModule} from '../src/modules/grammar-sub-topics/grammar-sub-topics.module';
+import {EntitySyncModule} from '../src/modules/entity-sync/entity-sync.module';
 import {AiGenerationService} from '../src/modules/ai/services/ai-generation.service';
 import {FcmProvider} from '../src/modules/notifications/fcm.provider';
 import {EmailService} from '../src/modules/auth/services/email.service';
+import {CloudinaryService} from '../src/modules/upload/cloudinary.service';
 import {ResponseInterceptor} from '../src/common/interceptors/response.interceptor';
 import {GlobalExceptionFilter} from '../src/common/filters/global-exception.filter';
 
@@ -51,6 +55,8 @@ async function run() {
     created = true;
     await db.synchronize();
     const codes = new Map<string, string>();
+    let failAvatarCleanup = true;
+    const avatarCleanupAttempts: string[] = [];
     const module = await Test.createTestingModule({imports: [
       ConfigModule.forRoot({isGlobal: true, ignoreEnvFile: true, load: [() => ({
         jwt: {secret: 'sprint09-access', refreshSecret: 'sprint09-refresh', expiresIn: '15m', refreshExpiresIn: '7d'},
@@ -59,11 +65,19 @@ async function run() {
       TypeOrmModule.forRoot(options),
       AuthModule, UsersModule, AiModule, PracticeModule, FlashcardsModule, FlashcardFoldersModule, ProgressModule,
       LearningStreaksModule, NotificationsModule, TopicsModule, VocabularyItemsModule, VocabularySetsModule, GrammarPatternsModule,
+      LearningContentModule, GrammarSubTopicsModule, EntitySyncModule,
     ]})
       .overrideProvider(AiGenerationService).useValue({generateWithRetry: async () => ({content: JSON.stringify({exercises: [{
         type: 'fill_blank', question: {text: 'これは____です。'}, correct_answer: '猫', explanation: {en: 'Cat', vi: 'Mèo'},
       }]})})})
       .overrideProvider(FcmProvider).useValue({configured: () => true, send: async () => 'sent'})
+      .overrideProvider(CloudinaryService).useValue({
+        uploadAvatar: async () => { throw new Error('No uploads in this fixture'); },
+        deleteAvatar: async (id: string) => {
+          avatarCleanupAttempts.push(id);
+          if (failAvatarCleanup) throw new BadRequestException('Failed to delete image');
+        },
+      })
       .overrideProvider(EmailService).useValue({sendEmailVerificationCode: async (email: string, code: string) => codes.set(email, code)})
       .compile();
     app = module.createNestApplication();
@@ -74,6 +88,9 @@ async function run() {
     app.useGlobalFilters(new GlobalExceptionFilter());
     await app.init();
     const api = request(app.getHttpServer());
+    stage = 'public-health-no-provider-metadata';
+    const publicHealth = await api.get('/api/ai/health').expect(200);
+    assert.deepEqual(publicHealth.body.data, {status: 'ok'});
 
     const login = async (name: string) => {
       const email = name + '@example.test', password = 'password123';
@@ -96,6 +113,13 @@ async function run() {
       if (u) r = r.auth(u.token, {type: 'bearer'});
       return r;
     };
+
+    stage = 'authenticated-provider-readiness';
+    for (const user of [a, admin]) {
+      const quota = await api.get('/api/ai/quota').auth(user.token, {type: 'bearer'}).expect(200);
+      assert.equal(quota.body.data.provider.configured, true);
+      assert.equal(quota.body.data.max_items, 15);
+    }
 
     // ---- Seed user A's private data across features ----
     stage = 'seed-owner-data';
@@ -123,6 +147,33 @@ async function run() {
     const installation = randomUUID();
     await api.put('/api/devices/' + installation).auth(a.token, {type: 'bearer'}).set('X-Nihonix-Account', a.id).send({token: 'a-device-token-1234567890', enabled: true}).expect(200);
 
+    const catalogSet = randomUUID();
+    await db.query("INSERT INTO vocabulary_sets(id,topic_id,slug,title) VALUES($1,$2,'s09-set',$3)", [catalogSet,topic,{en:'Set'}]);
+    await db.query("INSERT INTO grammar_sub_topics(slug,topic_id,level_code,title) VALUES('s09-grammar',$1,'N5',$2)", [topic,{en:'Grammar'}]);
+    await db.query("INSERT INTO grammar_patterns(slug,grammar_sub_topic_slug,topic_slug,level_code,pattern_jp,explanation) VALUES('s09-desu','s09-grammar','s09-topic','N5','です',$1)", [{en:'Polite ending'}]);
+    stage = 'authenticated-catalog-policy';
+    const catalogReads = [
+      '/api/levels','/api/levels/N5','/api/topics','/api/topics/' + topic,'/api/topics/' + topic + '/bundle',
+      '/api/vocabulary-items','/api/vocabulary-items/s09-neko','/api/vocabulary-items/sets/all',
+      '/api/vocabulary-sets','/api/vocabulary-sets/' + catalogSet,'/api/vocabulary-sets/by-topic/' + topic,
+      '/api/grammar-sub-topics','/api/grammar-sub-topics/s09-grammar','/api/grammar-sub-topics/level/N5',
+      '/api/grammar-patterns','/api/grammar-patterns/s09-desu','/api/grammar-patterns/sub-topic/s09-grammar',
+      '/api/catalog/manifest','/api/catalog/vocabulary-items','/api/catalog/vocabulary-items/s09-neko',
+      '/api/entity-sync/level/N5',
+    ];
+    for (const path of catalogReads) {
+      await api.get(path).expect(401);
+      await api.get(path).set('If-None-Match','"old-cache"').expect(401);
+      await api.get(path).auth(a.token, {type:'bearer'}).expect(200);
+    }
+    await api.post('/api/entity-sync/check').send({entityKind:'topic',etags:[]}).expect(401);
+    await api.post('/api/entity-sync/check').auth(a.token,{type:'bearer'}).send({entityKind:'topic',etags:[]}).expect(200);
+
+    const manifest = await api.get('/api/catalog/manifest').auth(a.token,{type:'bearer'}).expect(200);
+    assert.equal(manifest.headers['cache-control'],'private, no-cache');
+    assert.ok(manifest.headers.vary?.split(/,\\s*/).includes('Authorization'), 'Catalog response must vary by Authorization');
+    await api.get('/api/catalog/manifest').auth(a.token,{type:'bearer'}).set('If-None-Match',manifest.headers.etag).expect(304);
+
     // ---- 1. Every personal route rejects anonymous callers ----
     stage = 'anonymous-rejected';
     const personal: Array<[string, string]> = [
@@ -135,6 +186,16 @@ async function run() {
       ['put', '/api/devices/' + installation], ['delete', '/api/devices/' + installation],
       ['get', '/api/users'], ['get', '/api/users/' + a.id], ['put', '/api/users/' + a.id], ['delete', '/api/users/' + a.id],
       ['get', '/api/users/me/settings'], ['patch', '/api/users/me/settings'], ['get', '/api/users/me/level'],
+      ['patch','/api/users/me/level'], ['patch','/api/users/me/profile'], ['post','/api/users/me/avatar'],
+      ['post','/api/auth/me'], ['post','/api/auth/logout'],
+      ['post','/api/flashcard-folders'], ['get','/api/flashcard-folders/' + folderA],
+      ['put','/api/flashcard-folders/' + folderA], ['delete','/api/flashcard-folders/' + folderA],
+      ['post','/api/flashcards'], ['post','/api/flashcards/generate'], ['put','/api/flashcards/bulk'],
+      ['get','/api/flashcards/sets/' + setA + '/cards'], ['delete','/api/flashcards/sets/' + setA],
+      ['post','/api/practice/fill-blank'], ['post','/api/practice/multiple-choice'],
+      ['post','/api/learning-streaks/activity'],
+      ['post','/api/topics'], ['post','/api/topics/seed'], ['post','/api/vocabulary-sets'],
+      ['post','/api/vocabulary-items/generate'], ['post','/api/grammar-patterns/generate'],
     ];
     for (const [method, path] of personal) {
       const res = await as(method as any, path);
@@ -215,10 +276,38 @@ async function run() {
     assert.equal((await api.get('/api/learning-streaks').auth(rotated.accessToken, {type: 'bearer'})).status, 401, 'access token valid after logout');
     assert.equal((await api.post('/api/auth/refresh').send({refreshToken: rotated.refreshToken})).status, 401, 'refresh token valid after logout');
     assert.equal((await api.get('/api/learning-streaks').set('Authorization', 'Bearer not.a.jwt')).status, 401);
+    await api.get('/api/levels').auth(rotated.accessToken,{type:'bearer'}).set('If-None-Match','*').expect(401);
+    await api.get('/api/catalog/manifest').set('Authorization','Bearer not.a.jwt').expect(401);
 
     // ---- 6. Deletion removes the owner's data from every feature ----
+    stage = 'avatar-cleanup-failure';
+    await db.query('UPDATE users SET avatar_url=$2 WHERE id=$1', [a.id, 'https://images.example.test/avatar-a.png']);
+    const privateTables = db.entityMetadatas.flatMap(metadata =>
+      metadata.foreignKeys.filter(fk => fk.referencedEntityMetadata.tableName === 'users')
+        .map(fk => ({table: metadata.tableName, column: fk.columns[0].databaseName})));
+    assert.ok(privateTables.length >= 10, 'retention inventory unexpectedly small');
+    let populatedBefore = 0;
+    for (const entry of privateTables) {
+      assert.match(entry.table, /^[a-z0-9_]+$/);
+      assert.match(entry.column, /^[a-z0-9_]+$/);
+      const before = (await db.query('SELECT count(*)::int AS n FROM "' + entry.table + '" WHERE "' + entry.column + '"=$1', [a.id]))[0].n;
+      if (before > 0) populatedBefore++;
+    }
+    assert.ok(populatedBefore >= 8, 'deletion check needs populated feature data');
+    await as('delete', '/api/users/' + a.id, a).expect(400);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM users WHERE id=$1', [a.id]))[0].n, 1);
+    assert.equal((await as('get', '/api/users/' + a.id, a)).status, 200, 'failed cleanup must not falsely delete the account');
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM flashcards WHERE id=$1', [cardA]))[0].n, 1);
     stage = 'account-deletion-cascade';
+    failAvatarCleanup = false;
     await as('delete', '/api/users/' + a.id, a).expect(204);
+    assert.deepEqual(avatarCleanupAttempts, [a.id, a.id]);
+    for (const entry of privateTables) {
+      const left = (await db.query('SELECT count(*)::int AS n FROM "' + entry.table + '" WHERE "' + entry.column + '"=$1', [a.id]))[0].n;
+      assert.equal(left, 0, entry.table + ' retained deleted owner rows');
+    }
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM flashcards WHERE id=$1', [cardA]))[0].n, 0);
+    console.log('Deletion inventory: ' + privateTables.map(entry => entry.table + '.' + entry.column).sort().join(', '));
     const owned = ['flashcard_folders', 'flashcard_sets', 'learning_activity_events', 'notification_devices', 'practice_sessions'];
     let checked = 0;
     for (const table of owned) {
@@ -232,6 +321,7 @@ async function run() {
     }
     assert.ok(checked >= 4, 'cascade check was vacuous: only ' + checked + ' tables inspected');
     assert.equal((await as('get', '/api/learning-streaks', a)).status, 401, 'deleted user token still accepted');
+    await api.get('/api/catalog/manifest').auth(a.token,{type:'bearer'}).set('If-None-Match',manifest.headers.etag).expect(401);
 
     console.log('PASS Sprint09 ownership/role matrix: anonymous 401, cross-user 404/403/409, users self/admin, catalog admin-only, token replay/revocation, deletion cascade; no real providers.');
   } finally {

@@ -10,6 +10,7 @@ import { CreateVocabularySetDto } from './dto';
 
 @ApiTags('Vocabulary Sets')
 @Controller('vocabulary-sets')
+@UseGuards(JwtAuthGuard)
 export class VocabularySetsController {
   constructor(private readonly vocabularySetsService: VocabularySetsService) {}
 
@@ -53,7 +54,7 @@ export class VocabularySetsController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('admin')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new vocabulary set' })

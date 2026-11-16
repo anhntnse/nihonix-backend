@@ -9,7 +9,8 @@ export class AiController{
   if(req.headers['x-nihonix-account']&&req.headers['x-nihonix-account']!==req.user.id)throw new ConflictException('Account changed before AI request');
   return req.user.id;
  }
- @Get('health') health(){return this.service.healthCheck();}
+ // Public liveness only; provider readiness is exposed through authenticated quota.
+ @Get('health') health(){return {status:'ok'};}
  @Get('quota') @UseGuards(JwtAuthGuard)
  async quota(@Request() req){return {...await this.requests.quota(this.owner(req)),provider:await this.service.healthCheck()};}
  @Get('requests/:id') @UseGuards(JwtAuthGuard)

@@ -1,9 +1,12 @@
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { LearningContentService } from './learning-content.service';
 import { LearningQueryDto } from './learning-query.dto';
 
-/** Public catalog projection; authoring remains on the existing Admin-only routes. */
+/** Authenticated catalog projection; authoring remains on the existing Admin-only routes. */
 @Controller('catalog')
+@UseGuards(JwtAuthGuard)
 export class LearningContentController {
   constructor(private readonly content: LearningContentService) {}
   @Get('manifest')

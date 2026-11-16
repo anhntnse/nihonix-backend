@@ -10,6 +10,7 @@ import { GrammarPattern } from './entity/grammar-pattern.entity';
 
 @ApiTags('Grammar Patterns')
 @Controller('grammar-patterns')
+@UseGuards(JwtAuthGuard)
 export class GrammarPatternsController {
   constructor(private readonly grammarPatternsService: GrammarPatternsService) {}
 
@@ -38,7 +39,7 @@ export class GrammarPatternsController {
   }
 
   @Post('generate')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('admin')
   @ApiOperation({ summary: 'Generate grammar patterns using AI' })
   @ApiOkResponse({ description: 'Grammar generation started/completed' })

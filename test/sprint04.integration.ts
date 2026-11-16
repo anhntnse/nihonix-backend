@@ -7,6 +7,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { Test } from '@nestjs/testing';
+import {ConfigModule} from '@nestjs/config';
+import {AuthModule} from '../src/modules/auth/auth.module';
+import {EmailService} from '../src/modules/auth/services/email.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ValidationPipe } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -54,13 +57,24 @@ async function run() {
         ['pattern-'+String(i).padStart(3,'0'),own?'basic':'advanced-grammar',own?'greetings':'advanced',own?'N5':'N3','です','desu',
           {vi:'Lịch sự',en:'Polite ending',jp:'丁寧'},JSON.stringify(examples),{present:'です'},JSON.stringify(['polite','present'])]);
     }
-    const module=await Test.createTestingModule({imports:[TypeOrmModule.forRoot(options),LearningContentModule]}).compile();
+    const codes=new Map<string,string>();
+    const module=await Test.createTestingModule({imports:[
+      ConfigModule.forRoot({isGlobal:true,ignoreEnvFile:true,load:[()=>({jwt:{secret:'sprint04-access',refreshSecret:'sprint04-refresh',expiresIn:'15m',refreshExpiresIn:'7d'},bcrypt:{rounds:4}})]}),
+      TypeOrmModule.forRoot(options),AuthModule,LearningContentModule
+    ]}).overrideProvider(EmailService).useValue({sendEmailVerificationCode:async(email:string,code:string)=>codes.set(email,code)}).compile();
     app=module.createNestApplication(); app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({whitelist:true,forbidNonWhitelisted:true,transform:true}));
     app.useGlobalInterceptors(new ResponseInterceptor(app.get(Reflector)));
     app.useGlobalFilters(new GlobalExceptionFilter()); await app.init();
     const api=request(app.getHttpServer());
-    const list=async(kind:string,query:any={}) => (await api.get('/api/catalog/'+kind).query(query).expect(200)).body.data;
+    const email='sprint04@example.test',password='password123',username='sprint04';
+    await api.post('/api/auth/register').send({email,password,username}).expect(201);
+    await api.post('/api/auth/verify-email').send({email,code:codes.get(email)}).expect(200);
+    const signedIn=await api.post('/api/auth/login').send({username,password}).expect(200);
+    const token=signedIn.body.data.accessToken;
+    const catalogGet=(path:string)=>api.get(path).auth(token,{type:'bearer'});
+    await api.get('/api/catalog/vocabulary-items').expect(401);
+    const list=async(kind:string,query:any={}) => (await catalogGet('/api/catalog/'+kind).query(query).expect(200)).body.data;
     stage='paging';
     const first=await list('vocabulary-items',{topic_id:topic});
     const second=await list('vocabulary-items',{topic_id:topic,page:2});
@@ -84,25 +98,25 @@ async function run() {
     assert.equal((await list('grammar-patterns',{sub_topic_slug:'basic'})).total,21);
     assert.equal((await list('grammar-patterns',{q:'Lịch sự',level_code:'N3'})).total,2);
     stage='details-version';
-    const word=(await api.get('/api/catalog/vocabulary-items/word-000').expect(200)).body.data;
+    const word=(await catalogGet('/api/catalog/vocabulary-items/word-000').expect(200)).body.data;
     assert.equal(word.examples[0].sentence_jp,'こんにちは'); assert.equal(word.topic.id,topic);
-    const group=(await api.get('/api/catalog/vocabulary-sets/'+set).expect(200)).body.data;
+    const group=(await catalogGet('/api/catalog/vocabulary-sets/'+set).expect(200)).body.data;
     assert.equal(group.items_count,22); assert.equal(group.items,undefined);
-    const grammar=(await api.get('/api/catalog/grammar-patterns/pattern-000').expect(200)).body.data;
+    const grammar=(await catalogGet('/api/catalog/grammar-patterns/pattern-000').expect(200)).body.data;
     assert.equal(grammar.conjugation_rules.present,'です'); assert.equal(grammar.usage_examples.length,1);
-    await api.get('/api/catalog/grammar-sub-topics/basic').expect(200);
+    await catalogGet('/api/catalog/grammar-sub-topics/basic').expect(200);
     await db.query('UPDATE vocabulary_items SET kana=$1 WHERE slug=$2',['こんばんは','word-000']);
     assert.notEqual(first.version,(await list('vocabulary-items',{topic_id:topic})).version);
     stage='validation';
     for(const query of [{page:0},{page_size:101},{page:1.5},{level_code:'N9'},{topic_id:'bad'},{set_id:'bad'},{q:'x'.repeat(121)},{unknown:'field'}])
-      await api.get('/api/catalog/vocabulary-items').query(query).expect(400);
-    await api.get('/api/catalog/vocabulary-items').query({topic_id:randomUUID()}).expect(404);
-    await api.get('/api/catalog/vocabulary-items').query({set_id:randomUUID()}).expect(404);
-    await api.get('/api/catalog/grammar-patterns').query({sub_topic_slug:'missing'}).expect(404);
-    await api.get('/api/catalog/grammar-patterns').query({set_id:set}).expect(400);
-    await api.get('/api/catalog/vocabulary-sets/bad-uuid').expect(400);
-    await api.get('/api/catalog/vocabulary-items/missing').expect(404);
-    await api.get('/api/catalog/unknown').expect(404);
+      await catalogGet('/api/catalog/vocabulary-items').query(query).expect(400);
+    await catalogGet('/api/catalog/vocabulary-items').query({topic_id:randomUUID()}).expect(404);
+    await catalogGet('/api/catalog/vocabulary-items').query({set_id:randomUUID()}).expect(404);
+    await catalogGet('/api/catalog/grammar-patterns').query({sub_topic_slug:'missing'}).expect(404);
+    await catalogGet('/api/catalog/grammar-patterns').query({set_id:set}).expect(400);
+    await catalogGet('/api/catalog/vocabulary-sets/bad-uuid').expect(400);
+    await catalogGet('/api/catalog/vocabulary-items/missing').expect(404);
+    await catalogGet('/api/catalog/unknown').expect(404);
     assert.equal((await list('vocabulary-items',{level_code:'N1'})).items.length,0);
     console.log('PASS: Sprint 04 paging without gaps/duplicates, topic/level/parent filters, literal multilingual search, rich details, stable/changing versions, empty/missing/invalid data.');
   } finally {

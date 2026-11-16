@@ -36,6 +36,11 @@ export class ResponseInterceptor<T>
       .getResponse<Response>();
     requestId(response);
     const request = context.switchToHttp().getRequest<RequestWithMethod>();
+    const catalogRequest = context.switchToHttp().getRequest<Request>();
+    if (/^\/api\/(catalog|levels|topics|vocabulary-items|vocabulary-sets|grammar-sub-topics|grammar-patterns|entity-sync)(\/|$)/.test(catalogRequest.path)) {
+      response.setHeader('Cache-Control','private, no-cache');
+      response.vary('Authorization');
+    }
 
     return next.handle().pipe(
       map((data: unknown): ApiResponse<T> => {

@@ -129,6 +129,7 @@ async function run() {
     let access = loggedIn.body.data.accessToken;
     let refresh = loggedIn.body.data.refreshToken;
     const bearer = () => 'Bearer ' + access;
+    const catalogGet=(path:string)=>api.get(path).set('Authorization',bearer());
     const profile = await api.post('/api/auth/me').set('Authorization', bearer()).expect(200);
     assert.equal(profile.body.data.id, userId);
     assert.ok(Object.hasOwn(profile.body.data, 'avatar_url'));
@@ -160,29 +161,29 @@ async function run() {
       ['greeting-grammar',topicId,'N5',title]);
     await database.query('INSERT INTO grammar_patterns (slug,grammar_sub_topic_slug,topic_slug,level_code,pattern_jp,explanation) VALUES ($1,$2,$3,$4,$5,$6)',
       ['desu','greeting-grammar','greetings','N5','です',title]);
-    const levels = (await api.get('/api/levels').expect(200)).body.data;
+    const levels = (await catalogGet('/api/levels').expect(200)).body.data;
     assert.deepEqual(levels.map((l:any)=>l.code), ['N5','N4','N3','N2','N1']);
     assert.equal(levels[0].topic_count, 1);
     assert.equal(levels[0].vocabulary_count, 1);
     assert.equal(levels[0].grammar_count, 1);
     assert.equal(levels[1].topic_count, 0);
-    const missingLevel = await api.get('/api/levels/N9').expect(404);
+    const missingLevel = await catalogGet('/api/levels/N9').expect(404);
     assert.match(missingLevel.headers['x-request-id'], /^[0-9a-f-]{36}$/);
-    const topicsResponse = await api.get('/api/topics').expect(200);
+    const topicsResponse = await catalogGet('/api/topics').expect(200);
     assert.match(topicsResponse.headers['x-request-id'], /^[0-9a-f-]{36}$/);
     const firstTopics = topicsResponse.body.data;
-    const repeatedTopics = (await api.get('/api/topics').expect(200)).body.data;
+    const repeatedTopics = (await catalogGet('/api/topics').expect(200)).body.data;
     assert.equal(firstTopics[0].etag, repeatedTopics[0].etag);
-    await api.get('/api/topics?levelCode=N9').expect(400);
-    const bundle = (await api.get('/api/topics/greetings/bundle').expect(200)).body.data;
-    const sameBundle = (await api.get('/api/topics/'+topicId+'/bundle').expect(200)).body.data;
+    await catalogGet('/api/topics?levelCode=N9').expect(400);
+    const bundle = (await catalogGet('/api/topics/greetings/bundle').expect(200)).body.data;
+    const sameBundle = (await catalogGet('/api/topics/'+topicId+'/bundle').expect(200)).body.data;
     assert.equal(bundle.version, sameBundle.version);
     for (const field of ['vocabulary_sets','vocabulary_items','grammar_sub_topics','grammar_patterns'])
       assert.equal(bundle[field].length, 1);
     await database.query('UPDATE vocabulary_items SET kana=$1 WHERE slug=$2', ['こんばんは','hello']);
-    const changedBundle = (await api.get('/api/topics/greetings/bundle').expect(200)).body.data;
+    const changedBundle = (await catalogGet('/api/topics/greetings/bundle').expect(200)).body.data;
     assert.notEqual(changedBundle.version, bundle.version);
-    await api.get('/api/topics/missing/bundle').expect(404);
+    await catalogGet('/api/topics/missing/bundle').expect(404);
     const publicConfig = (await api.get('/api/app/config').expect(200)).body.data;
     assert.equal(publicConfig.schema_version, 1);
     assert.equal(typeof publicConfig.maintenance, 'boolean');

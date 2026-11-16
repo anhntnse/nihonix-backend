@@ -210,6 +210,7 @@ describe('API Endpoints (e2e)', () => {
     it('GET /api/topics - should return all topics with ETags', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/topics')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       const data = getData(response.body);
@@ -222,6 +223,7 @@ describe('API Endpoints (e2e)', () => {
     it('GET /api/topics?levelCode=N5 - should return filtered topics', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/topics?levelCode=N5')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       const data = getData(response.body);
@@ -244,6 +246,7 @@ describe('API Endpoints (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post('/api/topics')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send(newTopic)
         .expect(201);
 
@@ -257,6 +260,7 @@ describe('API Endpoints (e2e)', () => {
     it('POST /api/entity-sync/check - should check sync status for topics', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/entity-sync/check')
+        .set('Authorization', `Bearer ${accessToken}`)
         .send({
           entityKind: 'topic',
           levelCode: 'N5',
@@ -276,6 +280,7 @@ describe('API Endpoints (e2e)', () => {
       // First get topics to get ETags
       const topicsResponse = await request(app.getHttpServer())
         .get('/api/topics?levelCode=N5')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       const topics = getData(topicsResponse.body) || [];
@@ -287,6 +292,7 @@ describe('API Endpoints (e2e)', () => {
 
         const response = await request(app.getHttpServer())
           .post('/api/entity-sync/check')
+        .set('Authorization', `Bearer ${accessToken}`)
           .send({
             entityKind: 'topic',
             levelCode: 'N5',
@@ -304,6 +310,7 @@ describe('API Endpoints (e2e)', () => {
       // First get a topic slug
       const topicsResponse = await request(app.getHttpServer())
         .get('/api/topics?levelCode=N5')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       const topics = getData(topicsResponse.body) || [];
@@ -311,6 +318,7 @@ describe('API Endpoints (e2e)', () => {
         const slug = topics[0].slug;
         const response = await request(app.getHttpServer())
           .get(`/api/entity-sync/topic/${slug}`)
+        .set('Authorization', `Bearer ${accessToken}`)
           .expect(200);
 
         const data = getData(response.body);
@@ -322,6 +330,7 @@ describe('API Endpoints (e2e)', () => {
     it('GET /api/entity-sync/topic/:slug - should return 304 if ETag matches', async () => {
       const topicsResponse = await request(app.getHttpServer())
         .get('/api/topics?levelCode=N5')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       const topics = getData(topicsResponse.body) || [];
@@ -329,12 +338,14 @@ describe('API Endpoints (e2e)', () => {
         const slug = topics[0].slug;
         const firstResponse = await request(app.getHttpServer())
           .get(`/api/entity-sync/topic/${slug}`)
+        .set('Authorization', `Bearer ${accessToken}`)
           .expect(200);
 
         const etag = firstResponse.headers.etag;
         if (etag) {
           await request(app.getHttpServer())
             .get(`/api/entity-sync/topic/${slug}`)
+        .set('Authorization', `Bearer ${accessToken}`)
             .set('If-None-Match', etag)
             .expect(304);
         }

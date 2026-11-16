@@ -13,6 +13,7 @@ import { GetTopicsDto } from './dto/get-topics.dto';
 
 @ApiTags('Topics (Lessons)')
 @Controller('topics')
+@UseGuards(JwtAuthGuard)
 export class TopicsController {
   constructor(
     private readonly topicsService: TopicsService,
@@ -28,7 +29,7 @@ export class TopicsController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('admin')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new topic (lesson)' })
@@ -39,7 +40,7 @@ export class TopicsController {
   }
 
   @Post('seed')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('admin')
   @ApiOperation({ summary: 'Seed data for topics and grammar sub-topics (N3-N5)' })
   @ApiOkResponse({ description: 'Seed completed' })

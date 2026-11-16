@@ -10,6 +10,7 @@ import { VocabularyItem } from './entity/vocabulary-item.entity';
 
 @ApiTags('Vocabulary Items')
 @Controller('vocabulary-items')
+@UseGuards(JwtAuthGuard)
 export class VocabularyItemsController {
   constructor(private readonly vocabularyItemsService: VocabularyItemsService) {}
 
@@ -37,7 +38,7 @@ export class VocabularyItemsController {
   }
 
   @Post('generate')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles('admin')
   @ApiOperation({ summary: 'Generate vocabulary items using AI' })
   @ApiOkResponse({ description: 'Vocabulary generation started/completed' })
